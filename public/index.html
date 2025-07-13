@@ -26,7 +26,7 @@
       const name = document.getElementById('name').value.trim();
       const room = document.getElementById('room').value.trim();
       if (name && room) {
-        window.location.href = `/public/game.html?room=${encodeURIComponent(room)}&name=${encodeURIComponent(name)}`;
+        window.location.href = `/game.html?room=${encodeURIComponent(room)}&name=${encodeURIComponent(name)}`;
       }
     };
 
@@ -42,7 +42,7 @@
         div.onclick = () => {
           const name = prompt('Kullanıcı adınız');
           if (name) {
-            window.location.href = `/public/game.html?room=${encodeURIComponent(r.name)}&name=${encodeURIComponent(name)}`;
+            window.location.href = `/game.html?room=${encodeURIComponent(r.name)}&name=${encodeURIComponent(name)}`;
           }
         };
         list.appendChild(div);
