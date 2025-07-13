@@ -1,5 +1,4 @@
 // Çok odalı ve çok oyunculu matematik tahmin oyunu sunucusu
-import express from 'express';
 import http from 'http';
 import { Server } from 'socket.io';
 
