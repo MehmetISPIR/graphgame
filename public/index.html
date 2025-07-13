@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <title>Oda Girişi - Matematik Oyunu</title>
+  <style>
+    body { font-family: Arial; max-width: 400px; margin: 50px auto; }
+    input, button { width: 100%; padding: 10px; margin: 10px 0; }
+    #roomList { margin-top: 20px; }
+    .room { padding: 10px; border: 1px solid #ccc; margin-bottom: 5px; cursor: pointer; }
+  </style>
+  <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+  <h2>Matematik Oyunu</h2>
+  <input id="name" placeholder="Kullanıcı adınız" />
+  <input id="room" placeholder="Oda adı (yeni veya var olan)" />
+  <button id="join">Odaya Katıl</button>
+
+  <div id="roomList"></div>
+
+  <script>
+    const socket = io();
+
+    document.getElementById('join').onclick = () => {
+      const name = document.getElementById('name').value.trim();
+      const room = document.getElementById('room').value.trim();
+      if (name && room) {
+        window.location.href = `/public/game.html?room=${encodeURIComponent(room)}&name=${encodeURIComponent(name)}`;
+      }
+    };
+
+    socket.emit('getRooms');
+    socket.on('roomList', rooms => {
+      const list = document.getElementById('roomList');
+      list.innerHTML = '<h3>Mevcut Odalar</h3>';
+      rooms.forEach(r => {
+        const div = document.createElement('div');
+        div.className = 'room';
+        let status = r.inGame ? '🟢 Oynanıyor' : r.isWaiting ? '🟡 Bekliyor' : '🔵 Hazır';
+        div.textContent = `${r.name} (${r.userCount} oyuncu) - ${status}`;
+        div.onclick = () => {
+          const name = prompt('Kullanıcı adınız');
+          if (name) {
+            window.location.href = `/public/game.html?room=${encodeURIComponent(r.name)}&name=${encodeURIComponent(name)}`;
+          }
+        };
+        list.appendChild(div);
+      });
+    });
+  </script>
+</body>
+</html>
