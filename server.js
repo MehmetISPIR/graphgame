@@ -3,11 +3,14 @@ import express from 'express';
 import http from 'http';
 import { Server } from 'socket.io';
 
+const express = require("express");
 const app = express();
+const http = require("http");
 const server = http.createServer(app);
-const io = new Server(server);
+const path = require("path");
 
-app.use(express.static('.'));
+// 🔽 Burası kritik: public klasörü açıkça belirt
+app.use(express.static(path.join(__dirname, "public")));
 
 const rooms = new Map(); // roomId => Room
 
