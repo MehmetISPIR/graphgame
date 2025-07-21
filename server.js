@@ -116,7 +116,7 @@ io.on('connection', (socket) => {
       }
     }
 
-    startGameIfReady(room);
+    startGameIfReady(room);//From ix1 to world
     broadcastRoomList();
   });
 
