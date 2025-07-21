@@ -188,7 +188,7 @@ io.on('connection', (socket) => {
   });
 });
 
-const port = process.env.PORT || 3000;//From ix1 to world
+const port = process.env.PORT || 3000;//From ix1 to world-I tried.
 server.listen(port, () => {
   console.log(`Sunucu ${port} portunda çalışıyor`);
 });
