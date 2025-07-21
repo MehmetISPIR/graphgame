@@ -116,7 +116,7 @@ io.on('connection', (socket) => {
       }
     }
 
-    startGameIfReady(room);//From ix1 to world
+    startGameIfReady(room);
     broadcastRoomList();
   });
 
@@ -188,7 +188,7 @@ io.on('connection', (socket) => {
   });
 });
 
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 3000;//From ix1 to world
 server.listen(port, () => {
   console.log(`Sunucu ${port} portunda çalışıyor`);
 });
