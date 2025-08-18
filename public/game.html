@@ -1,11 +1,31 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
+  <meta charset="utf-8" />
+  <title>Matematik Oyunu</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    .game-container { display: flex; gap: 20px; }
+    .canvas-area { flex: 1; }
+    .sidebar { width: 320px; padding: 20px; background: #f5f5f5; }
+    .player-list { margin-bottom: 20px; }
+    .player { padding: 5px; margin: 2px 0; border-radius: 3px; }
+    .player.painter { background: #ffeb3b; font-weight: bold; }
+    .player.viewer { background: #e3f2fd; }
+    .game-info { margin-bottom: 20px; padding: 10px; background: white; border-radius: 5px; }
+    .controls { margin-top: 20px; }
+    .controls input, .controls button, .controls label, .controls select { margin: 5px 0; padding: 8px; width: 100%; box-sizing: border-box; }
+    .hidden { display: none; }
+    .scores { margin-top: 20px; }
+    .score-item { display: flex; justify-content: space-between; padding: 5px; }
+  </style>
 <meta charset="UTF-8" />
 <title>Matematik Oyunu</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&display=swap" rel="stylesheet">
 <script src="/socket.io/socket.io.js"></script>
+<script type="module" src="/engine.js"></script>
 
 <style>
   :root{
@@ -50,43 +70,6 @@
   .canvasBox{position:relative}
   #canvas{display:block; width:100%; height:auto; background:#fff; border:2px solid #d9c9a8}
 
-  <!-- ===== Graph Controls (non-breaking) ===== -->
-<section id="graph-controls" class="panel">
-  <div class="row">
-    <label for="funcInput" title="Ör: sin(x), x*x+3, cos(x/2)">
-      f(x)
-    </label>
-    <input id="funcInput" type="text" placeholder="ör: sin(x) + x/3" autocomplete="off" />
-  </div>
-
-  <div class="row">
-    <label for="xMin" title="Grafiğin sol sınırı">x min</label>
-    <input id="xMin" type="number" step="0.1" value="-10" />
-    <label for="xMax" title="Grafiğin sağ sınırı" style="margin-left:.5rem">x max</label>
-    <input id="xMax" type="number" step="0.1" value="10" />
-    <label for="samples" title="Çizim çözünürlüğü (nokta sayısı)" style="margin-left:.5rem">örnek</label>
-    <input id="samples" type="number" min="100" max="5000" value="800" />
-  </div>
-
-  <div class="row">
-    <label for="strokeColor" title="Çizgi rengi">renk</label>
-    <input id="strokeColor" type="color" value="#3b82f6" />
-    <label for="strokeWidth" title="Çizgi kalınlığı" style="margin-left:.5rem">kalınlık</label>
-    <input id="strokeWidth" type="number" min="1" max="10" value="2" />
-  </div>
-
-  <div class="row hint">
-    <span>İpucu: <code>sin(x)</code>, <code>cos(x)</code>, <code>tan(x)</code>, <code>sqrt(x)</code>, <code>abs(x)</code>, <code>log(x)</code> kullanabilirsin.</span>
-  </div>
-</section>
-
-<!-- Küçük canlı önizleme alanı -->
-<section id="preview-wrap">
-  <canvas id="previewCanvas" width="320" height="200"></canvas>
-</section>
-
-  
-
   /* SAĞ-ALT SKOR KARTI (yüzen) */
   .scores{
     position:fixed; right:24px; bottom:24px; width:260px;
@@ -101,21 +84,13 @@
   .guess{display:flex; gap:8px; align-items:center}
   .hide{display:none !important}
   @media (max-width: 1200px){ .scores{position:absolute; right:16px; bottom:16px} }
-
-  #graph-controls.panel{background:#fffdf6;border:1px solid #e8e2d2;border-radius:14px;padding:10px;margin:8px 0;font-family:system-ui,Segoe UI,Roboto,Arial}
-  #graph-controls .row{display:flex;align-items:center;gap:.5rem;margin:.35rem 0;flex-wrap:wrap}
-  #graph-controls label{font-size:.92rem;color:#3b2c1f}
-  #graph-controls input[type="text"], #graph-controls input[type="number"]{
-    border:1px solid #d5cdbd;border-radius:10px;padding:.45rem .6rem;min-width:8rem;outline:none
-  }
-  #graph-controls input[type="color"]{width:2.2rem;height:2.2rem;padding:0;border:none;background:transparent}
-  #graph-controls .hint{font-size:.85rem;color:#6b5641}
-  #preview-wrap{display:flex;justify-content:flex-start;gap:.75rem;align-items:center;margin:6px 0}
-  #previewCanvas{background:#ffffff;border:1px dashed #d3cbb9;border-radius:12px
 </style>
 </head>
 
 <body>
+  <div class="game-container">
+    <div class="canvas-area">
+      <canvas id="canvas" width="800" height="600" style="border:2px solid #333"></canvas>
 <div class="shell">
   <!-- Üst panel -->
   <div class="topbar">
@@ -130,10 +105,48 @@
       <button id="send" class="btn">Gönder</button>
       <button id="clear" class="btn">Temizle</button>
     </div>
+    <div class="sidebar">
+      <div class="game-info">
+        <h3>Oyun Durumu</h3>
+        <p id="gameStatus">Oyun başlatılıyor...</p>
+        <p id="currentPainter"></p>
+        <p><strong>Oda:</strong> <span id="roomLabel"></span></p>
+        <p><strong>Süre:</strong> <span id="countdown">--:--</span></p>
+        <p id="wordHint" class="hidden"></p>
+      </div>
 
+      <div class="player-list">
+        <h4>Oyuncular</h4>
+        <div id="playersList"></div>
+      </div>
     <!-- 2) Kelime (painter'a açık), Viewer'a “?” -->
     <div class="pill" id="wordBox">Kelime: <span id="wordTxt">?</span></div>
 
+      <div class="controls">
+        <div id="painterControls" class="hidden">
+          <h4>Çizim Kontrolü</h4>
+          <input id="expr" placeholder="y=sin(x)" />
+          <label>x min: <input id="xmin" type="number" value="-10" /></label>
+          <label>x max: <input id="xmax" type="number" value="10" /></label>
+          <label>dx: <input id="dx" type="number" value="0" /></label>
+          <label>dy: <input id="dy" type="number" value="0" /></label>
+          <label>θ (derece): <input id="theta" type="number" value="0" /></label>
+          <label>Renk: <input type="color" id="graphColor" value="#b00" /></label>
+          <button id="sendGraph">Gönder</button>
+          <button id="clearCanvas">Temizle</button>
+          <div id="wordToShow" style="background: #fff3cd; padding: 10px; margin: 10px 0; border-radius: 5px;"></div>
+        </div>
+
+        <div id="viewerControls" class="hidden">
+          <h4>Tahmin Et</h4>
+          <input id="guessInput" placeholder="Kelime tahmini" />
+          <button id="guessBtn">Tahmin Et</button>
+        </div>
+      </div>
+
+      <div class="scores">
+        <h4>Skorlar</h4>
+        <div id="scoresList"></div>
     <!-- 3) Sayaç -->
     <div class="timerWrap">
       <div style="display:flex; justify-content:space-between; font-weight:700; margin-bottom:4px">
@@ -143,6 +156,203 @@
     </div>
   </div>
 
+  <script type="module">
+    import { GraphEngine } from './engine.js';
+    import * as math from 'https://cdn.jsdelivr.net/npm/mathjs@11.11.0/+esm';
+
+    const socket = io();
+    const canvas = document.getElementById('canvas');
+    const engine = new GraphEngine(canvas);
+    let graphs = [];
+    let currentRole = 'viewer';
+    let currentWord = '';
+    let players = [];
+    let scores = {};
+    let remainingTime = 180; // saniye
+    let timerInterval;
+
+    const params = new URLSearchParams(location.search);
+    const room = params.get('room');
+    const name = params.get('name');
+    document.getElementById('roomLabel').textContent = room;
+
+    if (!room || !name) {
+      alert('Lütfen geçerli bir kullanıcı adı ve oda adı ile giriş yapınız.');
+      window.location.href = '/index.html';
+    }
+
+    socket.emit('create', { room });
+    socket.emit('join', { room, user: { name, role: 'viewer' } });
+
+    // --- Yardımcılar ---
+    function renderScores(sc = scores) {
+      const scoresList = document.getElementById('scoresList');
+      scoresList.innerHTML = '';
+      Object.entries(sc).forEach(([id, score]) => {
+        const player = players.find(p => p.id === id);
+        if (player) {
+          const div = document.createElement('div');
+          div.className = 'score-item';
+          div.innerHTML = `<span>${player.name}</span><span>${score}</span>`;
+          scoresList.appendChild(div);
+        }
+      });
+    }
+
+    function renderPlayers(list) {
+      const playersList = document.getElementById('playersList');
+      playersList.innerHTML = '';
+      list.forEach(u => {
+        const div = document.createElement('div');
+        div.className = `player ${u.role}`;
+        div.textContent = u.name + (u.role === 'painter' ? ' (Çiziyor)' : '');
+        playersList.appendChild(div);
+      });
+    }
+
+    function applyRoleUI(role) {
+      document.getElementById('painterControls').classList.toggle('hidden', role !== 'painter');
+      document.getElementById('viewerControls').classList.toggle('hidden', role !== 'viewer');
+    }
+
+    function drawPreview() {
+      if (currentRole !== 'painter') return;
+      const expr = document.getElementById('expr').value.trim();
+      if (!expr) return;
+
+      const xmin = parseFloat(document.getElementById('xmin').value) || -10;
+      const xmax = parseFloat(document.getElementById('xmax').value) || 10;
+      const dx = parseFloat(document.getElementById('dx').value) || 0;
+      const dy = parseFloat(document.getElementById('dy').value) || 0;
+      const theta = (parseFloat(document.getElementById('theta').value) || 0) * Math.PI / 180;
+      const color = document.getElementById('graphColor').value || '#b00';
+      const previewColor = hexToRgba(color, 0.3);  // %30 opak
+
+      const type = GraphEngine.detectGraphType(expr);
+      let compiled;
+      try {
+        compiled = math.compile(expr.replace(/^y=/, ''));
+      } catch { return; }
+
+      const previewGraph = {
+        type, expr, xmin, xmax, dx, dy, theta,
+        color: previewColor, compiled, path: undefined
+      };
+
+      function hexToRgba(hex, alpha = 1.0) {
+        hex = hex.replace('#', '');
+        if (hex.length === 3) {
+          hex = hex.split('').map(x => x + x).join('');
+        }
+        const r = parseInt(hex.substring(0,2), 16);
+        const g = parseInt(hex.substring(2,4), 16);
+        const b = parseInt(hex.substring(4,6), 16);
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+      }
+
+      engine.render([...graphs, previewGraph]);
+    }
+
+    ['expr', 'xmin', 'xmax', 'dx', 'dy', 'theta', 'graphColor'].forEach(id => {
+      document.getElementById(id).addEventListener('input', drawPreview);
+    });
+
+    document.getElementById('sendGraph').onclick = () => {
+      if (currentRole !== 'painter') return;
+
+      const expr = document.getElementById('expr').value.trim();
+      if (!expr) return;
+
+      const xmin = parseFloat(document.getElementById('xmin').value) || -10;
+      const xmax = parseFloat(document.getElementById('xmax').value) || 10;
+      const dx = parseFloat(document.getElementById('dx').value) || 0;
+      const dy = parseFloat(document.getElementById('dy').value) || 0;
+      const theta = (parseFloat(document.getElementById('theta').value) || 0) * Math.PI / 180;
+      const color = document.getElementById('graphColor').value || '#b00';
+
+      const type = GraphEngine.detectGraphType(expr);
+      const compiled = math.compile(expr.replace(/^y=/, ''));
+
+      const newGraph = { type, expr, xmin, xmax, dx, dy, theta, color, compiled };
+      graphs.push(newGraph);
+      engine.render(graphs);
+      socket.emit('addGraph', { room, graph: newGraph });
+    };
+
+    document.getElementById('clearCanvas').onclick = () => {
+      if (currentRole !== 'painter') return;
+      graphs = [];
+      engine.render(graphs);
+      socket.emit('clearCanvas', { room });
+    };
+
+    document.getElementById('guessBtn').onclick = () => {
+      // FIX: viewer kontrolünü client’ta kaldırdık; sunucu zaten doğruluyor.
+      const guess = document.getElementById('guessInput').value.trim();
+      if (guess) {
+        socket.emit('guess', { room, guess }); // rol kontrolü sunucuda
+        document.getElementById('guessInput').value = '';
+      }
+    };
+
+    document.getElementById('guessInput').addEventListener('keypress', e => {
+      if (e.key === 'Enter') document.getElementById('guessBtn').click();
+    });
+
+    // --- Sunucu eventleri ---
+    socket.on('graphs', g => {
+      graphs = g.map(o => ({
+        ...o,
+        compiled: math.compile(o.expr.replace(/^y=/, '')),
+        path: undefined
+      }));
+      engine.render(graphs);
+    });
+
+    socket.on('clearCanvas', () => {
+      graphs = [];
+      engine.render(graphs);
+    });
+
+    socket.on('users', users => {
+      // FIX: users geldiğinde hem listeyi, hem rol UI’ını, hem skorları yenile
+      players = users;
+      renderPlayers(users);
+      const me = users.find(p => p.id === socket.id);
+      if (me) {
+        currentRole = me.role;
+        applyRoleUI(currentRole);
+      }
+      renderScores(); // isim değişimi vb. için yeniden çiz
+    });
+
+    socket.on('game:state', payload => {
+      // FIX: merkezi durum güncellemesi — skor ve oyuncular buradan da akar
+      if (payload?.players) {
+        players = payload.players;
+        renderPlayers(players);
+        const me = players.find(p => p.id === socket.id);
+        if (me) {
+          currentRole = me.role;
+          applyRoleUI(currentRole);
+        }
+      }
+      if (payload?.scores) {
+        scores = payload.scores;
+        renderScores(scores);
+      }
+    });
+
+    socket.on('round:end', ({ word, scores: sc } = {}) => {
+      // FIX: tur bitiminde skoru güncelle
+      if (sc) {
+        scores = sc;
+        renderScores(scores);
+      }
+      if (word) {
+        document.getElementById('gameStatus').textContent = `Tur bitti. Kelime: ${word}`;
+      }
+    });
   <!-- Canvas (defter sayfası) -->
   <div class="paper">
     <div class="canvasBox">
@@ -150,6 +360,27 @@
     </div>
   </div>
 
+    socket.on('newGame', data => {
+      const me = data.roles.find(p => p.id === socket.id);
+      if (me) {
+        currentRole = me.role;
+        applyRoleUI(currentRole);
+      }
+
+      const painter = data.roles.find(p => p.role === 'painter');
+      document.getElementById('currentPainter').textContent = painter ? `Çizen: ${painter.name}` : '';
+      document.getElementById('gameStatus').textContent = 'Oyun devam ediyor...';
+
+      graphs = [];
+      engine.render(graphs);
+      clearInterval(timerInterval);
+      remainingTime = 180;
+      updateCountdown(); // hemen başlat
+      timerInterval = setInterval(() => {
+        remainingTime--;
+        updateCountdown();
+        if (remainingTime <= 0) clearInterval(timerInterval);
+      }, 1000);
   <!-- Tahmin (yalnız viewer) -->
   <div class="topbar" id="guessBar">
     <div class="guess">
@@ -229,28 +460,11 @@
   /* ==== Socket olayları ==== */
   socket.emit('join', { room, user: { name } });
 
-  // Grafikler (server'dan gelen ham veriyi client'ta derle)
-  socket.on('graphs', (arr = []) => {
-    graphs = arr.map(g => {
-      const type = g.type || GraphEngine.detectGraphType(g.expr);
-      const cg = GraphEngine.compileGraph({
-        type,
-        expr: g.expr,
-        color: g.color || '#4a3820',
-        xmin: g.xmin,
-        xmax: g.xmax,
-      });
-      cg.dx = g.dx || 0;
-      cg.dy = g.dy || 0;
-      cg.theta = g.theta || 0;
-      return cg;
-    });
-    rerender();
-  });
-
+  // Grafikler
+  socket.on('graphs', arr => { graphs = arr; rerender(); });
   socket.on('clearCanvas', () => { graphs = []; rerender(); });
 
-  // Kullanıcı listesi -> skorları da yenileyelim
+  // Kullanıcı listesi -> skorları da yenileyelim (isimleri göstermek için)
   socket.on('users', users => { renderScores(users); });
 
   // Yeni tur / kelime
@@ -284,6 +498,8 @@
     const me = players.find(p => p.name === name);
     myRole = me?.role || 'viewer';
     const painter = myRole === 'painter';
+
+    // painter: çizim aktif, guessBar gizli
     drawCtrls.classList.toggle('hide', !painter);
     guessBar.classList.toggle('hide', painter);
   });
@@ -301,6 +517,16 @@
       xmin: Number(xmin.value||-10),
       xmax: Number(xmax.value||10),
     });
+
+    function updateCountdown() {
+      const min = Math.floor(remainingTime / 60).toString().padStart(2, '0');
+      const sec = (remainingTime % 60).toString().padStart(2, '0');
+      document.getElementById('countdown').textContent = `${min}:${sec}`;
+    }
+
+    socket.on('wordForPainter', word => {
+      currentWord = word;
+      document.getElementById('wordToShow').innerHTML = `<strong>Çizmen gereken kelime: ${word}</strong>`;
     // dönüş/öteleme
     graph.dx = Number(dx.value||0);
     graph.dy = Number(dy.value||0);
@@ -327,6 +553,12 @@
       row.innerHTML = `<span>${u.name}</span><span id="sc_${u.id}">0</span>`;
       scoresBody.appendChild(row);
     });
+
+    socket.on('gameOver', finalScores => {
+      scores = finalScores;
+      renderScores(scores);
+      document.getElementById('gameStatus').textContent = 'Oyun bitti!';
+      alert('Oyun bitti! Tüm oyuncular çizdi.');
   }
   function renderScoresById(scores){
     Object.entries(scores||{}).forEach(([id, sc]) => {
@@ -335,6 +567,16 @@
     });
   }
 
+    socket.on('guessResult', res => {
+      if (res.correct) {
+        alert(`Doğru! Kelime: ${res.word}`);
+        scores = res.scores;
+        renderScores(scores); // ✔ anında güncelle
+      } else {
+        alert('Yanlış tahmin!');
+      }
+    });
+  </script>
   // İlk çizim
   rerender();
 </script>
