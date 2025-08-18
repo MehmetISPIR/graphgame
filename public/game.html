@@ -31,7 +31,7 @@
     box-shadow: inset 0 0 0 1px #ffffff80;
     margin-bottom:14px;
   }
-  .ctrls{display:flex; gap:8px; flex-wrap:wrap}
+  .ctrls{display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end}
   .input, .btn{
     padding:8px 10px; border-radius:8px; border:1px solid var(--border); background:#fffdf9; font-size:14px;
   }
@@ -41,6 +41,8 @@
   .timerWrap{min-width:160px}
   .barWrap{height:8px; background:#efe6d1; border:1px solid var(--border); border-radius:999px; overflow:hidden}
   .bar{height:100%; width:100%; background:linear-gradient(90deg,#b38a3e,#caa75b)}
+  .lbl{display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--muted)}
+  #preview{ background:linear-gradient(#f3e4b8,#e0c97a); border-color:#a17b2b }
 
   /* KAĞIT ÇERÇEVE + CANVAS */
   .paper{
@@ -72,15 +74,28 @@
   <!-- Üst panel -->
   <div class="topbar">
     <!-- 1) Çizim kontrolleri (sadece painter aktif) -->
-    <div class="ctrls" id="drawCtrls">
-      <input id="expr" class="input" placeholder="y=sin(x) veya (x^2 + y^2 = 9)" />
-      <input id="xmin" class="input" style="width:90px" placeholder="x min" value="-10" />
-      <input id="xmax" class="input" style="width:90px" placeholder="x max" value="10" />
-      <input id="dx" class="input" style="width:80px" placeholder="dx" value="0" />
-      <input id="dy" class="input" style="width:80px" placeholder="dy" value="0" />
-      <input id="theta" class="input" style="width:100px" placeholder="θ (derece)" value="0" />
-      <button id="send" class="btn">Gönder</button>
-      <button id="clear" class="btn">Temizle</button>
+    <div class="ctrls" id="drawCtrls" title="Fonksiyon ekleyip kanvasa çiz">
+      <label class="lbl">İfade
+        <input id="expr" class="input" placeholder="ör. y=sin(x)  veya  (x^2 + y^2 = 9)" aria-label="İfade" />
+      </label>
+      <label class="lbl">x min
+        <input id="xmin" class="input" style="width:90px" placeholder="-10" value="-10" aria-label="x minimum" />
+      </label>
+      <label class="lbl">x max
+        <input id="xmax" class="input" style="width:90px" placeholder="10" value="10" aria-label="x maksimum" />
+      </label>
+      <label class="lbl" title="Sağa (+) / Sola (-) öteleme">dx
+        <input id="dx" class="input" style="width:80px" placeholder="0" value="0" aria-label="dx öteleme" />
+      </label>
+      <label class="lbl" title="Yukarı (+) / Aşağı (-) öteleme">dy
+        <input id="dy" class="input" style="width:80px" placeholder="0" value="0" aria-label="dy öteleme" />
+      </label>
+      <label class="lbl" title="Döndürme (derece)">θ°
+        <input id="theta" class="input" style="width:100px" placeholder="0" value="0" aria-label="theta derece" />
+      </label>
+      <button id="preview" class="btn" type="button" title="Kanvasta önizle (yayınlamaz)">Önizleme</button>
+      <button id="send" class="btn" type="button" title="Çizimi odaya ekle">Ekle</button>
+      <button id="clear" class="btn" type="button" title="Kanvastaki tüm çizimleri sil">Temizle</button>
     </div>
 
     <!-- 2) Kelime (painter'a açık), Viewer'a “?” -->
@@ -127,8 +142,12 @@
   const canvas = document.getElementById('canvas');
   const eng = new GraphEngine(canvas);
   let graphs = [];
+  let previewGraph = null;
 
-  function rerender(){ eng.render(graphs); }
+  function rerender(){
+    const all = previewGraph ? [...graphs, previewGraph] : graphs;
+    eng.render(all);
+  }
   window.addEventListener('resize', rerender);
 
   /* ==== UI elemanları ==== */
@@ -139,6 +158,7 @@
   const dx   = document.getElementById('dx');
   const dy   = document.getElementById('dy');
   const theta= document.getElementById('theta');
+  const previewBtn = document.getElementById('preview');
   const send = document.getElementById('send');
   const clear= document.getElementById('clear');
 
@@ -240,27 +260,65 @@
     guessBar.classList.toggle('hide', painter);
   });
 
-  /* ==== Çizim işlemleri ==== */
+  /* ==== Yardımcılar ==== */
   function toRadians(deg){ return (Number(deg)||0) * Math.PI / 180; }
-  send.onclick = () => {
-    const gstr = (expr.value||'').trim();
-    if (!gstr) return;
-    const type = GraphEngine.detectGraphType(gstr);
-    const graph = GraphEngine.compileGraph({
+  function compileGraphSafe(exprStr, opts){
+    const type = GraphEngine.detectGraphType(exprStr);
+    return GraphEngine.compileGraph({
       type,
-      expr: gstr,
-      color: '#4a3820',
+      expr: exprStr,
+      color: opts?.color ?? '#4a3820',
       xmin: Number(xmin.value||-10),
       xmax: Number(xmax.value||10),
     });
-    // dönüş/öteleme
-    graph.dx = Number(dx.value||0);
-    graph.dy = Number(dy.value||0);
-    graph.theta = toRadians(theta.value||0);
+  }
+  function applyTransform(g){
+    g.dx = Number(dx.value||0);
+    g.dy = Number(dy.value||0);
+    g.theta = toRadians(theta.value||0);
+    return g;
+  }
 
+  /* ==== Önizleme (yalnız yerel) ==== */
+  function doPreview(){
+    const gstr = (expr.value||'').trim();
+    if (!gstr) { previewGraph = null; rerender(); return; }
+    try{
+      const g = compileGraphSafe(gstr, { color:'#8b5e34' });
+      applyTransform(g);
+      previewGraph = g;
+      rerender();
+    }catch(e){
+      previewGraph = null;
+      console.warn('preview compile error', e);
+      rerender();
+    }
+  }
+  const previewBtn = document.getElementById('preview');
+  previewBtn.onclick = doPreview;
+
+  // Yazarken otomatik önizleme (debounce 400ms)
+  let pvTimer = null;
+  ['input','change'].forEach(ev => expr.addEventListener(ev, () => {
+    clearTimeout(pvTimer);
+    pvTimer = setTimeout(doPreview, 400);
+  }));
+  ;[dx,dy,theta,xmin,xmax].forEach(el => el.addEventListener('change', () => {
+    if (previewGraph) doPreview();
+  }));
+
+  /* ==== Çizim (yayınla) ==== */
+  const send = document.getElementById('send');
+  send.onclick = () => {
+    const gstr = (expr.value||'').trim();
+    if (!gstr) return;
+    const graph = applyTransform(compileGraphSafe(gstr));
+    previewGraph = null; // yayınlarken yerel önizlemeyi kaldır
     socket.emit('addGraph', { room, graph });
   };
-  clear.onclick = () => socket.emit('clearCanvas', { room });
+
+  const clear = document.getElementById('clear');
+  clear.onclick = () => { previewGraph = null; socket.emit('clearCanvas', { room }); };
 
   /* ==== Tahmin ==== */
   guessBtn.onclick = () => {
