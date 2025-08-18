@@ -82,6 +82,7 @@
     let currentWord = '';
     let players = [];
     let scores = [];
+    let scores = {};
     let remainingTime = 180; // saniye
     let timerInterval;
 
@@ -100,6 +101,8 @@
 
     // --- Skor tablosu: tek yerden çiz ---
     function renderScores(sc) {
+    // --- Yardımcılar ---
+    function renderScores(sc = scores) {
       const scoresList = document.getElementById('scoresList');
       scoresList.innerHTML = '';
       if (!sc) sc = scores;
@@ -114,6 +117,22 @@
       });
     }
 
+    function renderPlayers(list) {
+      const playersList = document.getElementById('playersList');
+      playersList.innerHTML = '';
+      list.forEach(u => {
+        const div = document.createElement('div');
+        div.className = `player ${u.role}`;
+        div.textContent = u.name + (u.role === 'painter' ? ' (Çiziyor)' : '');
+        playersList.appendChild(div);
+      });
+    }
+
+    function applyRoleUI(role) {
+      document.getElementById('painterControls').classList.toggle('hidden', role !== 'painter');
+      document.getElementById('viewerControls').classList.toggle('hidden', role !== 'viewer');
+    }
+
     function drawPreview() {
       if (currentRole !== 'painter') return;
       const expr = document.getElementById('expr').value.trim();
@@ -125,7 +144,6 @@
       const dy = parseFloat(document.getElementById('dy').value) || 0;
       const theta = (parseFloat(document.getElementById('theta').value) || 0) * Math.PI / 180;
       const color = document.getElementById('graphColor').value || '#b00';
-const previewColor = hexToRgba(color, 0.3);  // %30 opak
       const previewColor = hexToRgba(color, 0.3);  // %30 opak
 
       const type = GraphEngine.detectGraphType(expr);
@@ -148,7 +166,6 @@ const previewColor = hexToRgba(color, 0.3);  // %30 opak
         const g = parseInt(hex.substring(2,4), 16);
         const b = parseInt(hex.substring(4,6), 16);
         return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
       }
 
       engine.render([...graphs, previewGraph]);
@@ -188,9 +205,12 @@ const previewColor = hexToRgba(color, 0.3);  // %30 opak
     };
 
     document.getElementById('guessBtn').onclick = () => {
+      // FIX: viewer kontrolünü client’ta kaldırdık; sunucu zaten doğruluyor.
       const guess = document.getElementById('guessInput').value.trim();
       if (guess && currentRole === 'viewer') {
         socket.emit('guess', { room, guess });
+      if (guess) {
+        socket.emit('guess', { room, guess }); // rol kontrolü sunucuda
         document.getElementById('guessInput').value = '';
       }
     };
@@ -199,6 +219,7 @@ const previewColor = hexToRgba(color, 0.3);  // %30 opak
       if (e.key === 'Enter') document.getElementById('guessBtn').click();
     });
 
+    // --- Sunucu eventleri ---
     socket.on('graphs', g => {
       graphs = g.map(o => ({
         ...o,
@@ -214,6 +235,7 @@ const previewColor = hexToRgba(color, 0.3);  // %30 opak
     });
 
     socket.on('users', users => {
+      // FIX: users geldiğinde hem listeyi, hem rol UI’ını, hem skorları yenile
       players = users;
       const playersList = document.getElementById('playersList');
       playersList.innerHTML = '';
@@ -225,6 +247,41 @@ const previewColor = hexToRgba(color, 0.3);  // %30 opak
       });
       // Oyuncu isimleri değişmiş olabilir -> skorları yeniden çiz
       renderScores(scores);
+      renderPlayers(users);
+      const me = users.find(p => p.id === socket.id);
+      if (me) {
+        currentRole = me.role;
+        applyRoleUI(currentRole);
+      }
+      renderScores(); // isim değişimi vb. için yeniden çiz
+    });
+
+    socket.on('game:state', payload => {
+      // FIX: merkezi durum güncellemesi — skor ve oyuncular buradan da akar
+      if (payload?.players) {
+        players = payload.players;
+        renderPlayers(players);
+        const me = players.find(p => p.id === socket.id);
+        if (me) {
+          currentRole = me.role;
+          applyRoleUI(currentRole);
+        }
+      }
+      if (payload?.scores) {
+        scores = payload.scores;
+        renderScores(scores);
+      }
+    });
+
+    socket.on('round:end', ({ word, scores: sc } = {}) => {
+      // FIX: tur bitiminde skoru güncelle
+      if (sc) {
+        scores = sc;
+        renderScores(scores);
+      }
+      if (word) {
+        document.getElementById('gameStatus').textContent = `Tur bitti. Kelime: ${word}`;
+      }
     });
 
     socket.on('newGame', data => {
@@ -233,6 +290,7 @@ const previewColor = hexToRgba(color, 0.3);  // %30 opak
         currentRole = me.role;
         document.getElementById('painterControls').classList.toggle('hidden', currentRole !== 'painter');
         document.getElementById('viewerControls').classList.toggle('hidden', currentRole !== 'viewer');
+        applyRoleUI(currentRole);
       }
 
       const painter = data.roles.find(p => p.role === 'painter');
@@ -242,13 +300,6 @@ const previewColor = hexToRgba(color, 0.3);  // %30 opak
       graphs = [];
       engine.render(graphs);
       clearInterval(timerInterval);
-  remainingTime = 180;
-  updateCountdown(); // hemen başlat
-  timerInterval = setInterval(() => {
-    remainingTime--;
-    updateCountdown();
-    if (remainingTime <= 0) clearInterval(timerInterval);
-  }, 1000);
       remainingTime = 180;
       updateCountdown(); // hemen başlat
       timerInterval = setInterval(() => {
@@ -259,10 +310,6 @@ const previewColor = hexToRgba(color, 0.3);  // %30 opak
     });
 
     function updateCountdown() {
-  const min = Math.floor(remainingTime / 60).toString().padStart(2, '0');
-  const sec = (remainingTime % 60).toString().padStart(2, '0');
-  document.getElementById('countdown').textContent = `${min}:${sec}`;
-}
       const min = Math.floor(remainingTime / 60).toString().padStart(2, '0');
       const sec = (remainingTime % 60).toString().padStart(2, '0');
       document.getElementById('countdown').textContent = `${min}:${sec}`;
@@ -275,17 +322,6 @@ const previewColor = hexToRgba(color, 0.3);  // %30 opak
 
     socket.on('gameOver', finalScores => {
       scores = finalScores;
-      const scoresList = document.getElementById('scoresList');
-      scoresList.innerHTML = '';
-      Object.entries(scores).forEach(([id, score]) => {
-        const player = players.find(p => p.id === id);
-        if (player) {
-          const div = document.createElement('div');
-          div.className = 'score-item';
-          div.innerHTML = `<span>${player.name}</span><span>${score}</span>`;
-          scoresList.appendChild(div);
-        }
-      });
       renderScores(scores);
       document.getElementById('gameStatus').textContent = 'Oyun bitti!';
       alert('Oyun bitti! Tüm oyuncular çizdi.');
@@ -302,5 +338,4 @@ const previewColor = hexToRgba(color, 0.3);  // %30 opak
     });
   </script>
 </body>
-</html>
 </html>
