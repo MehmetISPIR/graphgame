@@ -6,7 +6,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&display=swap" rel="stylesheet">
 <script src="/socket.io/socket.io.js"></script>
-<script src="/engine.js"></script>
 
 <style>
   :root{
@@ -121,7 +120,7 @@
 </aside>
 
 <script type="module">
-  const { GraphEngine } = window;   // import yok, globalden al
+  import { GraphEngine } from '/engine.js';
   const socket = io();
 
   /* ==== Canvas + Engine ==== */
@@ -182,11 +181,28 @@
   /* ==== Socket olayları ==== */
   socket.emit('join', { room, user: { name } });
 
-  // Grafikler
-  socket.on('graphs', arr => { graphs = arr; rerender(); });
+  // Grafikler (server'dan gelen ham veriyi client'ta derle)
+  socket.on('graphs', (arr = []) => {
+    graphs = arr.map(g => {
+      const type = g.type || GraphEngine.detectGraphType(g.expr);
+      const cg = GraphEngine.compileGraph({
+        type,
+        expr: g.expr,
+        color: g.color || '#4a3820',
+        xmin: g.xmin,
+        xmax: g.xmax,
+      });
+      cg.dx = g.dx || 0;
+      cg.dy = g.dy || 0;
+      cg.theta = g.theta || 0;
+      return cg;
+    });
+    rerender();
+  });
+
   socket.on('clearCanvas', () => { graphs = []; rerender(); });
 
-  // Kullanıcı listesi -> skorları da yenileyelim (isimleri göstermek için)
+  // Kullanıcı listesi -> skorları da yenileyelim
   socket.on('users', users => { renderScores(users); });
 
   // Yeni tur / kelime
@@ -220,8 +236,6 @@
     const me = players.find(p => p.name === name);
     myRole = me?.role || 'viewer';
     const painter = myRole === 'painter';
-
-    // painter: çizim aktif, guessBar gizli
     drawCtrls.classList.toggle('hide', !painter);
     guessBar.classList.toggle('hide', painter);
   });
