@@ -121,7 +121,7 @@
 </aside>
 
 <script type="module">
-  import { GraphEngine } from '/engine.js';
+  const { GraphEngine } = window;   // import yok, globalden al
   const socket = io();
 
   /* ==== Canvas + Engine ==== */
