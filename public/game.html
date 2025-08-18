@@ -81,7 +81,7 @@
     let currentRole = 'viewer';
     let currentWord = '';
     let players = [];
-    let scores = [];
+    let scores = {};
     let remainingTime = 180; // saniye
     let timerInterval;
 
@@ -98,11 +98,10 @@
     socket.emit('create', { room });
     socket.emit('join', { room, user: { name, role: 'viewer' } });
 
-    // --- Skor tablosu: tek yerden çiz ---
-    function renderScores(sc) {
+    // --- Yardımcılar ---
+    function renderScores(sc = scores) {
       const scoresList = document.getElementById('scoresList');
       scoresList.innerHTML = '';
-      if (!sc) sc = scores;
       Object.entries(sc).forEach(([id, score]) => {
         const player = players.find(p => p.id === id);
         if (player) {
@@ -112,6 +111,22 @@
           scoresList.appendChild(div);
         }
       });
+    }
+
+    function renderPlayers(list) {
+      const playersList = document.getElementById('playersList');
+      playersList.innerHTML = '';
+      list.forEach(u => {
+        const div = document.createElement('div');
+        div.className = `player ${u.role}`;
+        div.textContent = u.name + (u.role === 'painter' ? ' (Çiziyor)' : '');
+        playersList.appendChild(div);
+      });
+    }
+
+    function applyRoleUI(role) {
+      document.getElementById('painterControls').classList.toggle('hidden', role !== 'painter');
+      document.getElementById('viewerControls').classList.toggle('hidden', role !== 'viewer');
     }
 
     function drawPreview() {
@@ -186,9 +201,10 @@
     };
 
     document.getElementById('guessBtn').onclick = () => {
+      // FIX: viewer kontrolünü client’ta kaldırdık; sunucu zaten doğruluyor.
       const guess = document.getElementById('guessInput').value.trim();
-      if (guess && currentRole === 'viewer') {
-        socket.emit('guess', { room, guess });
+      if (guess) {
+        socket.emit('guess', { room, guess }); // rol kontrolü sunucuda
         document.getElementById('guessInput').value = '';
       }
     };
@@ -197,6 +213,7 @@
       if (e.key === 'Enter') document.getElementById('guessBtn').click();
     });
 
+    // --- Sunucu eventleri ---
     socket.on('graphs', g => {
       graphs = g.map(o => ({
         ...o,
@@ -212,25 +229,50 @@
     });
 
     socket.on('users', users => {
+      // FIX: users geldiğinde hem listeyi, hem rol UI’ını, hem skorları yenile
       players = users;
-      const playersList = document.getElementById('playersList');
-      playersList.innerHTML = '';
-      users.forEach(u => {
-        const div = document.createElement('div');
-        div.className = `player ${u.role}`;
-        div.textContent = u.name + (u.role === 'painter' ? ' (Çiziyor)' : '');
-        playersList.appendChild(div);
-      });
-      // Oyuncu isimleri değişmiş olabilir -> skorları yeniden çiz
-      renderScores(scores);
+      renderPlayers(users);
+      const me = users.find(p => p.id === socket.id);
+      if (me) {
+        currentRole = me.role;
+        applyRoleUI(currentRole);
+      }
+      renderScores(); // isim değişimi vb. için yeniden çiz
+    });
+
+    socket.on('game:state', payload => {
+      // FIX: merkezi durum güncellemesi — skor ve oyuncular buradan da akar
+      if (payload?.players) {
+        players = payload.players;
+        renderPlayers(players);
+        const me = players.find(p => p.id === socket.id);
+        if (me) {
+          currentRole = me.role;
+          applyRoleUI(currentRole);
+        }
+      }
+      if (payload?.scores) {
+        scores = payload.scores;
+        renderScores(scores);
+      }
+    });
+
+    socket.on('round:end', ({ word, scores: sc } = {}) => {
+      // FIX: tur bitiminde skoru güncelle
+      if (sc) {
+        scores = sc;
+        renderScores(scores);
+      }
+      if (word) {
+        document.getElementById('gameStatus').textContent = `Tur bitti. Kelime: ${word}`;
+      }
     });
 
     socket.on('newGame', data => {
       const me = data.roles.find(p => p.id === socket.id);
       if (me) {
         currentRole = me.role;
-        document.getElementById('painterControls').classList.toggle('hidden', currentRole !== 'painter');
-        document.getElementById('viewerControls').classList.toggle('hidden', currentRole !== 'viewer');
+        applyRoleUI(currentRole);
       }
 
       const painter = data.roles.find(p => p.role === 'painter');
