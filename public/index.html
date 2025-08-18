@@ -66,8 +66,12 @@
     socket.on('roomList', rooms => {
       const list = document.getElementById('roomList');
       list.innerHTML = '<h3>Mevcut Odalar</h3>';
-      rooms.forEach(r => {
-        const div = document.createElement('div');
+      div.innerHTML = `<div><strong>${r.name}</strong> <span class="status">(${r.userCount} oyuncu)</span></div>
+                 <div class="status">${status}</div>`;
+div.onclick = () => {
+  const name = document.getElementById('name').value.trim() || prompt('Kullanıcı adınız');
+  if (name) window.location.href = `/game.html?room=${encodeURIComponent(r.name)}&name=${encodeURIComponent(name)}`;
+};
         div.className = 'room';
         let status = r.inGame ? '🟢 Oynanıyor' : r.isWaiting ? '🟡 Bekliyor' : '🔵 Hazır';
         div.textContent = `${r.name} (${r.userCount} oyuncu) - ${status}`;
