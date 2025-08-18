@@ -50,6 +50,43 @@
   .canvasBox{position:relative}
   #canvas{display:block; width:100%; height:auto; background:#fff; border:2px solid #d9c9a8}
 
+  <!-- ===== Graph Controls (non-breaking) ===== -->
+<section id="graph-controls" class="panel">
+  <div class="row">
+    <label for="funcInput" title="Ör: sin(x), x*x+3, cos(x/2)">
+      f(x)
+    </label>
+    <input id="funcInput" type="text" placeholder="ör: sin(x) + x/3" autocomplete="off" />
+  </div>
+
+  <div class="row">
+    <label for="xMin" title="Grafiğin sol sınırı">x min</label>
+    <input id="xMin" type="number" step="0.1" value="-10" />
+    <label for="xMax" title="Grafiğin sağ sınırı" style="margin-left:.5rem">x max</label>
+    <input id="xMax" type="number" step="0.1" value="10" />
+    <label for="samples" title="Çizim çözünürlüğü (nokta sayısı)" style="margin-left:.5rem">örnek</label>
+    <input id="samples" type="number" min="100" max="5000" value="800" />
+  </div>
+
+  <div class="row">
+    <label for="strokeColor" title="Çizgi rengi">renk</label>
+    <input id="strokeColor" type="color" value="#3b82f6" />
+    <label for="strokeWidth" title="Çizgi kalınlığı" style="margin-left:.5rem">kalınlık</label>
+    <input id="strokeWidth" type="number" min="1" max="10" value="2" />
+  </div>
+
+  <div class="row hint">
+    <span>İpucu: <code>sin(x)</code>, <code>cos(x)</code>, <code>tan(x)</code>, <code>sqrt(x)</code>, <code>abs(x)</code>, <code>log(x)</code> kullanabilirsin.</span>
+  </div>
+</section>
+
+<!-- Küçük canlı önizleme alanı -->
+<section id="preview-wrap">
+  <canvas id="previewCanvas" width="320" height="200"></canvas>
+</section>
+
+  
+
   /* SAĞ-ALT SKOR KARTI (yüzen) */
   .scores{
     position:fixed; right:24px; bottom:24px; width:260px;
@@ -64,6 +101,17 @@
   .guess{display:flex; gap:8px; align-items:center}
   .hide{display:none !important}
   @media (max-width: 1200px){ .scores{position:absolute; right:16px; bottom:16px} }
+
+  #graph-controls.panel{background:#fffdf6;border:1px solid #e8e2d2;border-radius:14px;padding:10px;margin:8px 0;font-family:system-ui,Segoe UI,Roboto,Arial}
+  #graph-controls .row{display:flex;align-items:center;gap:.5rem;margin:.35rem 0;flex-wrap:wrap}
+  #graph-controls label{font-size:.92rem;color:#3b2c1f}
+  #graph-controls input[type="text"], #graph-controls input[type="number"]{
+    border:1px solid #d5cdbd;border-radius:10px;padding:.45rem .6rem;min-width:8rem;outline:none
+  }
+  #graph-controls input[type="color"]{width:2.2rem;height:2.2rem;padding:0;border:none;background:transparent}
+  #graph-controls .hint{font-size:.85rem;color:#6b5641}
+  #preview-wrap{display:flex;justify-content:flex-start;gap:.75rem;align-items:center;margin:6px 0}
+  #previewCanvas{background:#ffffff;border:1px dashed #d3cbb9;border-radius:12px
 </style>
 </head>
 
