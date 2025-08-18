@@ -3,143 +3,198 @@
 <head>
   <meta charset="utf-8" />
   <title>Matematik Oyunu</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script src="/socket.io/socket.io.js"></script>
- <!-- Tema fontu -->
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&display=swap" rel="stylesheet">
 
-<style>
-  /* Rol tabanlı görünürlük: her şeyi bastıracak kadar güçlü olsun */
-.hide, .hidden, [data-hidden="true"] {
-  display: none !important;
-  visibility: hidden !important;
-  pointer-events: none !important;
-}
-/* ===== Victorian / Parşömen tema (YALNIZCA GÖRSEL) ===== */
-:root{
-  --parchment:#f6efe1; --paper:#fffdf6; --ink:#2b1d0e; --muted:#6b5641;
-  --gold:#b38a3e; --border:#d8c7a3; --shadow:0 14px 40px rgba(0,0,0,.18);
-}
-body{
-  background:
-    radial-gradient(1200px 700px at 50% 0%, #f8f1e6 0%, #efe3cd 60%, #e6d5b5 100%),
-    repeating-linear-gradient(10deg, #0000 0 24px, #00000006 24px 25px);
-  color:var(--ink);
-  font-family:"Libre Baskerville", Georgia, serif;
-}
+  <!-- Tema fontu -->
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&display=swap" rel="stylesheet">
 
-/* Dış çerçeve */
-.frame{
-  max-width:1200px; margin:28px auto; padding:20px; background:var(--parchment);
-  border:1px solid var(--gold); border-radius:10px; box-shadow:var(--shadow); position:relative;
-}
-.frame::before{
-  content:""; position:absolute; inset:10px; border:3px double var(--gold); border-radius:8px; pointer-events:none;
-}
+  <style>
+  /* Rol tabanlı görünürlük: tema tarafından ezilmesin */
+  .hide, .hidden, [data-hidden="true"] {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+  }
 
-/* Mevcut layout’u bozmadan yeniden renklendir */
-.game-container{ background:var(--paper); border:1px solid var(--border);
-  border-radius:12px; padding:16px; box-shadow:inset 0 0 0 1px #ffffff80; }
+  /* ===== Victorian / Parşömen tema (yalnızca görsel) ===== */
+  :root{
+    --parchment:#f6efe1; --paper:#fffdf6; --ink:#2b1d0e; --muted:#6b5641;
+    --gold:#b38a3e; --border:#d8c7a3; --shadow:0 14px 40px rgba(0,0,0,.18);
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    background:
+      radial-gradient(1200px 700px at 50% 0%, #f8f1e6 0%, #efe3cd 60%, #e6d5b5 100%),
+      repeating-linear-gradient(10deg, #0000 0 24px, #00000006 24px 25px);
+    color:var(--ink);
+    font-family:"Libre Baskerville", Georgia, serif;
+  }
 
-/* Canvas kutusu */
-.canvas-area{
-  background:#fffdf9 !important; border:1px solid var(--border) !important; border-radius:12px !important;
-}
-#canvas{
-  background:#fffaf0 !important; border:1px solid #d8c7a3 !important; border-radius:10px;
-}
+  /* Dış çerçeve */
+  .frame{
+    max-width:1200px; margin:28px auto; padding:20px; background:var(--parchment);
+    border:1px solid var(--gold); border-radius:10px; box-shadow:var(--shadow); position:relative;
+  }
+  .frame::before{
+    content:""; position:absolute; inset:10px; border:3px double var(--gold); border-radius:8px; pointer-events:none;
+  }
 
-/* Sağ panel ve kartlar */
-.sidebar{ background:transparent !important; border:none !important; padding:0 !important; }
-.game-info,.player-list,.controls,.scores{
-  background:var(--paper) !important; border:1px solid var(--border) !important;
-  border-radius:12px !important; padding:14px !important; margin-bottom:12px !important;
-}
+  /* İç kutu */
+  .game-container{
+    background:var(--paper); border:1px solid var(--border);
+    border-radius:12px; padding:16px; box-shadow:inset 0 0 0 1px #ffffff80;
+    display:grid; grid-template-columns: 1.4fr .6fr; gap:16px;
+  }
 
-/* Başlıklar */
-h3,h4{ color:var(--ink) !important; margin:0 0 10px !important; }
-label{ color:var(--muted) !important; }
+  /* Canvas kutusu */
+  .canvas-area{
+    background:#fffdf9 !important; border:1px solid var(--border) !important; border-radius:12px !important;
+    padding:10px;
+  }
+  #canvas{
+    width:100%; height:auto; max-width:100%;
+    background:#fffaf0 !important; border:1px solid #d8c7a3 !important; border-radius:10px;
+  }
 
-/* Inputlar */
-input[type="text"], input[type="number"], input[type="color"], .controls input{
-  background:#fffdf9 !important; color:var(--ink) !important;
-  border:1px solid var(--border) !important; border-radius:10px !important; padding:10px 12px !important;
-}
-input:focus{ border-color:var(--gold) !important; box-shadow:0 0 0 3px #b38a3e21 !important; }
+  /* Sağ panel */
+  .sidebar{ background:transparent !important; border:none !important; padding:0 !important; }
+  .section{
+    background:var(--paper); border:1px solid var(--border);
+    border-radius:12px; padding:14px; margin-bottom:12px;
+    box-shadow: inset 0 0 0 1px #ffffff80;
+  }
 
-/* Butonlar (Gönder, Temizle, Tahmin) */
-button{
-  border:1px solid #8a6a2a !important; border-radius:10px !important; cursor:pointer;
-  background:linear-gradient(#e9d6a6,#d6b86a) !important; color:#3a2a0d !important; font-weight:700 !important;
-}
-button:hover{ filter:brightness(1.04); }
-button.secondary{ background:#efe3cd !important; }
+  /* Başlıklar */
+  h3,h4{ color:var(--ink); margin:0 0 10px; }
+  label{ color:var(--muted); }
 
-/* Oyuncu listesi elemanı */
-.player{ background:#fff6e0 !important; border:1px dashed #e4cf9f; color:var(--ink) !important; }
-.player.painter{ background:#fff0c2 !important; color:#3a2a0d !important; font-weight:700 !important; }
+  /* Inputlar */
+  input[type="text"], input[type="number"], input[type="color"]{
+    background:#fffdf9; color:var(--ink);
+    border:1px solid var(--border); border-radius:10px; padding:10px 12px;
+  }
+  input:focus{ border-color:var(--gold); box-shadow:0 0 0 3px #b38a3e21; outline:none; }
 
-/* Süre barı (golden) */
-.barWrap{ height:10px; background:#f1e6cb !important; border:1px solid var(--border) !important; }
-#timebar{ background:#b38a3e !important; width:100%; transition:width .25s linear; }
+  /* Butonlar */
+  button{
+    border:1px solid #8a6a2a; border-radius:10px; cursor:pointer;
+    background:linear-gradient(#e9d6a6,#d6b86a); color:#3a2a0d; font-weight:700;
+    padding:8px 14px;
+  }
+  button:hover{ filter:brightness(1.04); }
+  button.secondary{ background:#efe3cd; }
 
-/* Skor satırları */
-#scoresList .score-item{ display:flex; justify-content:space-between; padding:6px 8px;
-  border-bottom:1px dotted #e5d7b6; }
+  /* Esnek satır düzeni */
+  .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .field{display:flex;align-items:center;gap:6px}
+  .field label{font-size:13px;color:var(--muted)}
+  .field input[type="text"], .field input[type="number"]{min-width:110px}
 
-/* "Çizmen gereken kelime" kutusu (painter) */
-#wordToShow{ background:#fff7e0 !important; border:1px dashed #d4b06d !important; color:#3a2c18 !important; }
-</style>
+  /* Süre barı */
+  .barWrap{ height:10px; background:#f1e6cb; border:1px solid var(--border); border-radius:6px; margin-top:6px; }
+  #timebar{ height:100%; background:#b38a3e; width:100%; border-radius:6px; transition:width .25s linear; }
+
+  /* Oyuncu listesi */
+  .player{ background:#fff6e0; border:1px dashed #e4cf9f; color:var(--ink); padding:6px 8px; border-radius:8px; }
+  .player + .player{ margin-top:6px; }
+  .player.painter{ background:#fff0c2; color:#3a2a0d; font-weight:700; }
+
+  /* Skorlar iki sütun */
+  #scoresList{display:grid;grid-template-columns:1fr auto;gap:6px 12px}
+  #scoresList .name{opacity:.9}
+  #scoresList .pts{text-align:right;min-width:2ch}
+
+  /* Painter kelime kutusu */
+  #wordToShow{ background:#fff7e0; border:1px dashed #d4b06d; color:#3a2c18; padding:8px 10px; border-radius:8px; display:inline-block; margin-top:8px; }
+  </style>
 </head>
 <body>
-  <div class="game-container">
-    <div class="canvas-area">
-      <canvas id="canvas" width="800" height="600" style="border:2px solid #333"></canvas>
-    </div>
-    <div class="sidebar">
-      <div class="game-info">
-        <h3>Oyun Durumu</h3>
-        <p id="gameStatus">Oyun başlatılıyor...</p>
-        <p id="currentPainter"></p>
-        <p><strong>Oda:</strong> <span id="roomLabel"></span></p>
-        <p><strong>Süre:</strong> <span id="countdown">--:--</span></p>
-        <div class="barWrap"><div id="timebar" class="bar"></div></div>
-        <p id="wordHint" class="hidden"></p>
+  <main class="frame">
+    <div class="game-container">
+      <div class="canvas-area">
+        <canvas id="canvas" width="800" height="600"></canvas>
       </div>
 
-      <div class="player-list">
-        <h4>Oyuncular</h4>
-        <div id="playersList"></div>
-      </div>
-
-      <div class="controls">
-        <div id="painterControls" class="hidden">
-          <h4>Çizim Kontrolü</h4>
-          <input id="expr" placeholder="y=sin(x)" />
-          <label>x min: <input id="xmin" type="number" value="-10" /></label>
-          <label>x max: <input id="xmax" type="number" value="10" /></label>
-          <label>dx: <input id="dx" type="number" value="0" /></label>
-          <label>dy: <input id="dy" type="number" value="0" /></label>
-          <label>θ (derece): <input id="theta" type="number" value="0" /></label>
-          <label>Renk: <input type="color" id="graphColor" value="#b00" /></label>
-          <button id="sendGraph">Gönder</button>
-          <button id="clearCanvas">Temizle</button>
-          <div id="wordToShow" style="background: #fff3cd; padding: 10px; margin: 10px 0; border-radius: 5px;"></div>
+      <div class="sidebar">
+        <div class="game-info section">
+          <h3>Oyun Durumu</h3>
+          <p id="gameStatus">Oyun başlatılıyor...</p>
+          <p id="currentPainter"></p>
+          <p><strong>Oda:</strong> <span id="roomLabel"></span></p>
+          <p><strong>Süre:</strong> <span id="countdown">--:--</span></p>
+          <div class="barWrap"><div id="timebar" class="bar"></div></div>
+          <p id="wordHint" class="hidden"></p>
         </div>
 
-        <div id="viewerControls" class="hidden">
-          <h4>Tahmin Et</h4>
-          <input id="guessInput" placeholder="Kelime tahmini" />
-          <button id="guessBtn">Tahmin Et</button>
+        <div class="player-list section">
+          <h4>Oyuncular</h4>
+          <div id="playersList"></div>
+        </div>
+
+        <div class="controls">
+          <div id="painterControls" class="hidden section">
+            <h4>Çizim Kontrolü</h4>
+
+            <div class="row">
+              <div class="field">
+                <label for="expr">y =</label>
+                <input id="expr" placeholder="sin(x) veya x*x+3" />
+              </div>
+
+              <div class="field">
+                <label for="xmin">x min:</label>
+                <input id="xmin" type="number" value="-10" />
+              </div>
+
+              <div class="field">
+                <label for="xmax">x max:</label>
+                <input id="xmax" type="number" value="10" />
+              </div>
+
+              <div class="field">
+                <label for="dx">dx:</label>
+                <input id="dx" type="number" value="0" />
+              </div>
+
+              <div class="field">
+                <label for="dy">dy:</label>
+                <input id="dy" type="number" value="0" />
+              </div>
+
+              <div class="field">
+                <label for="theta">θ (°):</label>
+                <input id="theta" type="number" value="0" />
+              </div>
+
+              <div class="field">
+                <label for="graphColor">Renk:</label>
+                <input type="color" id="graphColor" value="#b00" style="width:44px;height:32px;padding:0" />
+              </div>
+
+              <button id="sendGraph">Gönder</button>
+              <button id="clearCanvas" class="secondary">Temizle</button>
+            </div>
+
+            <div id="wordToShow"></div>
+          </div>
+
+          <div id="viewerControls" class="hidden section">
+            <h4>Tahmin Et</h4>
+            <input id="guessInput" placeholder="Kelime tahmini" />
+            <button id="guessBtn">Tahmin Et</button>
+          </div>
+        </div>
+
+        <div class="scores section">
+          <h4>Skorlar</h4>
+          <div id="scoresList"></div>
         </div>
       </div>
-
-      <div class="scores">
-        <h4>Skorlar</h4>
-        <div id="scoresList"></div>
-      </div>
     </div>
-  </div>
+  </main>
 
   <script type="module">
     import { GraphEngine } from './engine.js';
@@ -156,16 +211,18 @@ button.secondary{ background:#efe3cd !important; }
     let remainingTime = 180; // saniye
     let timerInterval;
 
+    // URL parametreleri
     const params = new URLSearchParams(location.search);
     const room = params.get('room');
     const name = params.get('name');
-    document.getElementById('roomLabel').textContent = room;
+    document.getElementById('roomLabel').textContent = room || '';
 
     if (!room || !name) {
       alert('Lütfen geçerli bir kullanıcı adı ve oda adı ile giriş yapınız.');
       window.location.href = '/index.html';
     }
 
+    // Odaya giriş
     socket.emit('create', { room });
     socket.emit('join', { room, user: { name, role: 'viewer' } });
 
@@ -175,12 +232,10 @@ button.secondary{ background:#efe3cd !important; }
       scoresList.innerHTML = '';
       Object.entries(sc).forEach(([id, score]) => {
         const player = players.find(p => p.id === id);
-        if (player) {
-          const div = document.createElement('div');
-          div.className = 'score-item';
-          div.innerHTML = `<span>${player.name}</span><span>${score}</span>`;
-          scoresList.appendChild(div);
-        }
+        if (!player) return;
+        const row = document.createElement('div');
+        row.innerHTML = `<span class="name">${player.name}</span><span class="pts">${score}</span>`;
+        scoresList.appendChild(row);
       });
     }
 
@@ -195,11 +250,14 @@ button.secondary{ background:#efe3cd !important; }
       });
     }
 
+    // Tek (merkezi) rol-görünürlük fonksiyonu
     function applyRoleUI(role) {
-      document.getElementById('painterControls').classList.toggle('hidden', role !== 'painter');
-      document.getElementById('viewerControls').classList.toggle('hidden', role !== 'viewer');
+      const isPainter = role === 'painter';
+      document.getElementById('painterControls').classList.toggle('hidden', !isPainter);
+      document.getElementById('viewerControls').classList.toggle('hidden',  isPainter);
     }
 
+    // Canlı önizleme
     function drawPreview() {
       if (currentRole !== 'painter') return;
       const expr = document.getElementById('expr').value.trim();
@@ -224,24 +282,24 @@ button.secondary{ background:#efe3cd !important; }
         color: previewColor, compiled, path: undefined
       };
 
+      engine.render([...graphs, previewGraph]);
+
       function hexToRgba(hex, alpha = 1.0) {
         hex = hex.replace('#', '');
-        if (hex.length === 3) {
-          hex = hex.split('').map(x => x + x).join('');
-        }
+        if (hex.length === 3) hex = hex.split('').map(x => x + x).join('');
         const r = parseInt(hex.substring(0,2), 16);
         const g = parseInt(hex.substring(2,4), 16);
         const b = parseInt(hex.substring(4,6), 16);
         return `rgba(${r}, ${g}, ${b}, ${alpha})`;
       }
-
-      engine.render([...graphs, previewGraph]);
     }
 
     ['expr', 'xmin', 'xmax', 'dx', 'dy', 'theta', 'graphColor'].forEach(id => {
-      document.getElementById(id).addEventListener('input', drawPreview);
+      const el = document.getElementById(id);
+      el && el.addEventListener('input', drawPreview);
     });
 
+    // Gönder
     document.getElementById('sendGraph').onclick = () => {
       if (currentRole !== 'painter') return;
 
@@ -250,8 +308,8 @@ button.secondary{ background:#efe3cd !important; }
 
       const xmin = parseFloat(document.getElementById('xmin').value) || -10;
       const xmax = parseFloat(document.getElementById('xmax').value) || 10;
-      const dx = parseFloat(document.getElementById('dx').value) || 0;
-      const dy = parseFloat(document.getElementById('dy').value) || 0;
+      const dx   = parseFloat(document.getElementById('dx').value)   || 0;
+      const dy   = parseFloat(document.getElementById('dy').value)   || 0;
       const theta = (parseFloat(document.getElementById('theta').value) || 0) * Math.PI / 180;
       const color = document.getElementById('graphColor').value || '#b00';
 
@@ -264,6 +322,7 @@ button.secondary{ background:#efe3cd !important; }
       socket.emit('addGraph', { room, graph: newGraph });
     };
 
+    // Temizle
     document.getElementById('clearCanvas').onclick = () => {
       if (currentRole !== 'painter') return;
       graphs = [];
@@ -271,15 +330,13 @@ button.secondary{ background:#efe3cd !important; }
       socket.emit('clearCanvas', { room });
     };
 
+    // Tahmin
     document.getElementById('guessBtn').onclick = () => {
-      // FIX: viewer kontrolünü client’ta kaldırdık; sunucu zaten doğruluyor.
       const guess = document.getElementById('guessInput').value.trim();
-      if (guess) {
-        socket.emit('guess', { room, guess }); // rol kontrolü sunucuda
-        document.getElementById('guessInput').value = '';
-      }
+      if (!guess) return;
+      socket.emit('guess', { room, guess }); // rol kontrolü sunucuda
+      document.getElementById('guessInput').value = '';
     };
-
     document.getElementById('guessInput').addEventListener('keypress', e => {
       if (e.key === 'Enter') document.getElementById('guessBtn').click();
     });
@@ -300,7 +357,6 @@ button.secondary{ background:#efe3cd !important; }
     });
 
     socket.on('users', users => {
-      // FIX: users geldiğinde hem listeyi, hem rol UI’ını, hem skorları yenile
       players = users;
       renderPlayers(users);
       const me = users.find(p => p.id === socket.id);
@@ -312,7 +368,6 @@ button.secondary{ background:#efe3cd !important; }
     });
 
     socket.on('game:state', payload => {
-      // FIX: merkezi durum güncellemesi — skor ve oyuncular buradan da akar
       if (payload?.players) {
         players = payload.players;
         renderPlayers(players);
@@ -329,11 +384,7 @@ button.secondary{ background:#efe3cd !important; }
     });
 
     socket.on('round:end', ({ word, scores: sc } = {}) => {
-      // FIX: tur bitiminde skoru güncelle
-      if (sc) {
-        scores = sc;
-        renderScores(scores);
-      }
+      if (sc) { scores = sc; renderScores(scores); }
       if (word) {
         document.getElementById('gameStatus').textContent = `Tur bitti. Kelime: ${word}`;
       }
@@ -345,19 +396,13 @@ button.secondary{ background:#efe3cd !important; }
         currentRole = me.role;
         applyRoleUI(currentRole);
       }
-
       const painter = data.roles.find(p => p.role === 'painter');
       document.getElementById('currentPainter').textContent = painter ? `Çizen: ${painter.name}` : '';
       document.getElementById('gameStatus').textContent = 'Oyun devam ediyor...';
 
-      // örnek: rol geldiğinde
-function applyRoleUI(isPainter) {
-  document.getElementById('painterControls')?.classList.toggle('hide', !isPainter);
-  document.getElementById('viewerControls')?.classList.toggle('hide',  isPainter);
-}
-      
       graphs = [];
       engine.render(graphs);
+
       clearInterval(timerInterval);
       remainingTime = 180;
       updateCountdown(); // hemen başlat
@@ -369,13 +414,16 @@ function applyRoleUI(isPainter) {
     });
 
     function updateCountdown() {
-  const min = Math.floor(remainingTime / 60).toString().padStart(2, '0');
-  const sec = (remainingTime % 60).toString().padStart(2, '0');
-  document.getElementById('countdown').textContent = `${min}:${sec}`;
+      const min = Math.floor(remainingTime / 60).toString().padStart(2, '0');
+      const sec = (remainingTime % 60).toString().padStart(2, '0');
+      document.getElementById('countdown').textContent = `${min}:${sec}`;
 
-  // ▼ Süre barını doldur (180 sn varsayılan; sende farklıysa roundSec değerini kullan)
-  const bar = document.getElementById('timebar'); if (bar) { const p = Math.max(0, remainingTime/180); bar.style.width = (p*100)+'%'; }
-}
+      const bar = document.getElementById('timebar');
+      if (bar) {
+        const p = Math.max(0, remainingTime/180);
+        bar.style.width = (p*100)+'%';
+      }
+    }
 
     socket.on('wordForPainter', word => {
       currentWord = word;
@@ -393,11 +441,11 @@ function applyRoleUI(isPainter) {
       if (res.correct) {
         alert(`Doğru! Kelime: ${res.word}`);
         scores = res.scores;
-        renderScores(scores); // ✔ anında güncelle
+        renderScores(scores);
       } else {
         alert('Yanlış tahmin!');
       }
     });
   </script>
-    </main>
+</body>
 </html>
