@@ -16,15 +16,34 @@ const rooms = new Map(); // roomId => Room
 
 function pickRandomWord() {
   const words = [
-    "elma",
-    "araba",
-    "ev",
-    "kalem",
-    "masa",
-    "kitap",
-    "telefon",
-    "bilgisayar",
-  ];
+      "gözlük",
+      "saat",
+      "balon",
+      "dağ",
+      "bardak",
+      "bayrak",
+      "köprü",
+      "anahtar",
+      "şemsiye",
+      "makas",
+      "yelkenli",
+      "kelebek",
+      "gitar",
+      "kum saati",
+      "mıknatıs",
+      "çapa",
+      "ok",
+      "uçurtma",
+      "kulaklık",
+      "fener",
+      "ay",
+      "yay",
+      "gözyaşı",
+      "kitaplık",
+      "balık",
+      "tren",
+      "lamba"
+        ];
   return words[Math.floor(Math.random() * words.length)];
 }
 
