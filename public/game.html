@@ -5,48 +5,6 @@
   <title>Matematik Oyunu</title>
   <script src="/socket.io/socket.io.js"></script>
   <style>
-  :root{
-    --bg:#0f1216; --canvasBorder:#2a3240; --grid:#253042; --axes:#d1b97b;
-    --panel:#161a20; --card:#1b2027; --text:#e8edf3; --muted:#9aa6b2; --border:#2a3240;
-    --accent:#3b82f6; --warn:#f59e0b; --danger:#ef4444; --good:#22c55e;
-  }
-  *{box-sizing:border-box}
-  body{margin:0; background:var(--bg); color:var(--text); font-family:Inter, system-ui, Arial, sans-serif}
-  .game-container{
-    max-width:1200px; margin:auto; padding:16px; display:grid; grid-template-columns:1fr 340px; gap:16px;
-  }
-  @media (max-width: 980px){
-    .game-container{grid-template-columns:1fr}
-    .sidebar{order:2}
-    .canvas-area{order:1}
-  }
-  .canvas-area{
-    background: #0b0f14; padding:12px; border:1px solid var(--canvasBorder); border-radius:14px;
-  }
-  canvas{width:100%; height:auto; max-height:70vh; border:2px solid var(--canvasBorder); background:#0b1016}
-  .sidebar{
-    background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:14px;
-    position:sticky; top:12px; align-self:start;
-  }
-  h3,h4{margin:6px 0 10px}
-  .game-info,.player-list,.controls,.scores{
-    background:var(--card); border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:12px;
-  }
-  .player{padding:6px 8px; border-radius:8px; margin:4px 0; background:#131922}
-  .player.painter{background:#3a2b00; color:#fff7d6; font-weight:700}
-  .hidden{display:none}
-  input,button,label select{
-    width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--border);
-    background:#0f141b; color:var(--text); outline:none; margin:6px 0;
-  }
-  input:focus{border-color:var(--accent); box-shadow:0 0 0 3px rgba(59,130,246,.15)}
-  button{background:linear-gradient(180deg,#3b82f6,#2563eb); border:none; font-weight:600; cursor:pointer}
-  button.secondary{background:#1e293b}
-  #wordToShow{background:#2b1f00; color:#fff1c2; border:1px dashed #8b6b00}
-  /* countdown bar */
-  .barWrap{height:10px; background:#1b2431; border-radius:999px; overflow:hidden; border:1px solid var(--border); margin-top:6px}
-  .bar{height:100%; width:100%}
-</style>
     body { font-family: Arial, sans-serif; margin: 20px; }
     .game-container { display: flex; gap: 20px; }
     .canvas-area { flex: 1; }
@@ -75,7 +33,6 @@
         <p id="currentPainter"></p>
         <p><strong>Oda:</strong> <span id="roomLabel"></span></p>
         <p><strong>Süre:</strong> <span id="countdown">--:--</span></p>
-        <div class="barWrap"><div id="timebar" class="bar"></div></div>
         <p id="wordHint" class="hidden"></p>
       </div>
 
@@ -124,7 +81,7 @@
     let currentRole = 'viewer';
     let currentWord = '';
     let players = [];
-    let scores = {};
+    let scores = [];
     let remainingTime = 180; // saniye
     let timerInterval;
 
@@ -141,10 +98,11 @@
     socket.emit('create', { room });
     socket.emit('join', { room, user: { name, role: 'viewer' } });
 
-    // --- Yardımcılar ---
-    function renderScores(sc = scores) {
+    // --- Skor tablosu: tek yerden çiz ---
+    function renderScores(sc) {
       const scoresList = document.getElementById('scoresList');
       scoresList.innerHTML = '';
+      if (!sc) sc = scores;
       Object.entries(sc).forEach(([id, score]) => {
         const player = players.find(p => p.id === id);
         if (player) {
@@ -154,22 +112,6 @@
           scoresList.appendChild(div);
         }
       });
-    }
-
-    function renderPlayers(list) {
-      const playersList = document.getElementById('playersList');
-      playersList.innerHTML = '';
-      list.forEach(u => {
-        const div = document.createElement('div');
-        div.className = `player ${u.role}`;
-        div.textContent = u.name + (u.role === 'painter' ? ' (Çiziyor)' : '');
-        playersList.appendChild(div);
-      });
-    }
-
-    function applyRoleUI(role) {
-      document.getElementById('painterControls').classList.toggle('hidden', role !== 'painter');
-      document.getElementById('viewerControls').classList.toggle('hidden', role !== 'viewer');
     }
 
     function drawPreview() {
@@ -183,6 +125,7 @@
       const dy = parseFloat(document.getElementById('dy').value) || 0;
       const theta = (parseFloat(document.getElementById('theta').value) || 0) * Math.PI / 180;
       const color = document.getElementById('graphColor').value || '#b00';
+const previewColor = hexToRgba(color, 0.3);  // %30 opak
       const previewColor = hexToRgba(color, 0.3);  // %30 opak
 
       const type = GraphEngine.detectGraphType(expr);
@@ -205,6 +148,7 @@
         const g = parseInt(hex.substring(2,4), 16);
         const b = parseInt(hex.substring(4,6), 16);
         return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
       }
 
       engine.render([...graphs, previewGraph]);
@@ -244,10 +188,9 @@
     };
 
     document.getElementById('guessBtn').onclick = () => {
-      // FIX: viewer kontrolünü client’ta kaldırdık; sunucu zaten doğruluyor.
       const guess = document.getElementById('guessInput').value.trim();
-      if (guess) {
-        socket.emit('guess', { room, guess }); // rol kontrolü sunucuda
+      if (guess && currentRole === 'viewer') {
+        socket.emit('guess', { room, guess });
         document.getElementById('guessInput').value = '';
       }
     };
@@ -256,7 +199,6 @@
       if (e.key === 'Enter') document.getElementById('guessBtn').click();
     });
 
-    // --- Sunucu eventleri ---
     socket.on('graphs', g => {
       graphs = g.map(o => ({
         ...o,
@@ -272,50 +214,25 @@
     });
 
     socket.on('users', users => {
-      // FIX: users geldiğinde hem listeyi, hem rol UI’ını, hem skorları yenile
       players = users;
-      renderPlayers(users);
-      const me = users.find(p => p.id === socket.id);
-      if (me) {
-        currentRole = me.role;
-        applyRoleUI(currentRole);
-      }
-      renderScores(); // isim değişimi vb. için yeniden çiz
-    });
-
-    socket.on('game:state', payload => {
-      // FIX: merkezi durum güncellemesi — skor ve oyuncular buradan da akar
-      if (payload?.players) {
-        players = payload.players;
-        renderPlayers(players);
-        const me = players.find(p => p.id === socket.id);
-        if (me) {
-          currentRole = me.role;
-          applyRoleUI(currentRole);
-        }
-      }
-      if (payload?.scores) {
-        scores = payload.scores;
-        renderScores(scores);
-      }
-    });
-
-    socket.on('round:end', ({ word, scores: sc } = {}) => {
-      // FIX: tur bitiminde skoru güncelle
-      if (sc) {
-        scores = sc;
-        renderScores(scores);
-      }
-      if (word) {
-        document.getElementById('gameStatus').textContent = `Tur bitti. Kelime: ${word}`;
-      }
+      const playersList = document.getElementById('playersList');
+      playersList.innerHTML = '';
+      users.forEach(u => {
+        const div = document.createElement('div');
+        div.className = `player ${u.role}`;
+        div.textContent = u.name + (u.role === 'painter' ? ' (Çiziyor)' : '');
+        playersList.appendChild(div);
+      });
+      // Oyuncu isimleri değişmiş olabilir -> skorları yeniden çiz
+      renderScores(scores);
     });
 
     socket.on('newGame', data => {
       const me = data.roles.find(p => p.id === socket.id);
       if (me) {
         currentRole = me.role;
-        applyRoleUI(currentRole);
+        document.getElementById('painterControls').classList.toggle('hidden', currentRole !== 'painter');
+        document.getElementById('viewerControls').classList.toggle('hidden', currentRole !== 'viewer');
       }
 
       const painter = data.roles.find(p => p.role === 'painter');
@@ -325,25 +242,14 @@
       graphs = [];
       engine.render(graphs);
       clearInterval(timerInterval);
+  remainingTime = 180;
+  updateCountdown(); // hemen başlat
+  timerInterval = setInterval(() => {
+    remainingTime--;
+    updateCountdown();
+    if (remainingTime <= 0) clearInterval(timerInterval);
+  }, 1000);
       remainingTime = 180;
-      const ROUND_TOTAL = 180; // saniye
-function updateCountdown() {
-  const min = Math.floor(remainingTime / 60).toString().padStart(2, '0');
-  const sec = (remainingTime % 60).toString().padStart(2, '0');
-  document.getElementById('countdown').textContent = `${min}:${sec}`;
-
-  // ---- Progress bar ----
-  const pct = Math.max(0, Math.min(1, remainingTime / ROUND_TOTAL));
-  const bar = document.getElementById('timebar');
-  if (bar){
-    bar.style.width = (pct*100).toFixed(2) + '%';
-    // renk: >60% mavi, 60-30% sarı, <30% kırmızı
-    let color = 'linear-gradient(90deg,#3b82f6,#2563eb)';
-    if (pct <= 0.6 && pct > 0.3) color = 'linear-gradient(90deg,#f59e0b,#d97706)';
-    if (pct <= 0.3) color = 'linear-gradient(90deg,#ef4444,#b91c1c)';
-    bar.style.background = color;
-  }
-}
       updateCountdown(); // hemen başlat
       timerInterval = setInterval(() => {
         remainingTime--;
@@ -353,6 +259,10 @@ function updateCountdown() {
     });
 
     function updateCountdown() {
+  const min = Math.floor(remainingTime / 60).toString().padStart(2, '0');
+  const sec = (remainingTime % 60).toString().padStart(2, '0');
+  document.getElementById('countdown').textContent = `${min}:${sec}`;
+}
       const min = Math.floor(remainingTime / 60).toString().padStart(2, '0');
       const sec = (remainingTime % 60).toString().padStart(2, '0');
       document.getElementById('countdown').textContent = `${min}:${sec}`;
@@ -365,6 +275,17 @@ function updateCountdown() {
 
     socket.on('gameOver', finalScores => {
       scores = finalScores;
+      const scoresList = document.getElementById('scoresList');
+      scoresList.innerHTML = '';
+      Object.entries(scores).forEach(([id, score]) => {
+        const player = players.find(p => p.id === id);
+        if (player) {
+          const div = document.createElement('div');
+          div.className = 'score-item';
+          div.innerHTML = `<span>${player.name}</span><span>${score}</span>`;
+          scoresList.appendChild(div);
+        }
+      });
       renderScores(scores);
       document.getElementById('gameStatus').textContent = 'Oyun bitti!';
       alert('Oyun bitti! Tüm oyuncular çizdi.');
@@ -381,4 +302,5 @@ function updateCountdown() {
     });
   </script>
 </body>
+</html>
 </html>
