@@ -350,6 +350,12 @@ button.secondary{ background:#efe3cd !important; }
       document.getElementById('currentPainter').textContent = painter ? `Çizen: ${painter.name}` : '';
       document.getElementById('gameStatus').textContent = 'Oyun devam ediyor...';
 
+      // örnek: rol geldiğinde
+function applyRoleUI(isPainter) {
+  document.getElementById('painterControls')?.classList.toggle('hide', !isPainter);
+  document.getElementById('viewerControls')?.classList.toggle('hide',  isPainter);
+}
+      
       graphs = [];
       engine.render(graphs);
       clearInterval(timerInterval);
