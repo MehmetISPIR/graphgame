@@ -5,6 +5,48 @@
   <title>Matematik Oyunu</title>
   <script src="/socket.io/socket.io.js"></script>
   <style>
+  :root{
+    --bg:#0f1216; --canvasBorder:#2a3240; --grid:#253042; --axes:#d1b97b;
+    --panel:#161a20; --card:#1b2027; --text:#e8edf3; --muted:#9aa6b2; --border:#2a3240;
+    --accent:#3b82f6; --warn:#f59e0b; --danger:#ef4444; --good:#22c55e;
+  }
+  *{box-sizing:border-box}
+  body{margin:0; background:var(--bg); color:var(--text); font-family:Inter, system-ui, Arial, sans-serif}
+  .game-container{
+    max-width:1200px; margin:auto; padding:16px; display:grid; grid-template-columns:1fr 340px; gap:16px;
+  }
+  @media (max-width: 980px){
+    .game-container{grid-template-columns:1fr}
+    .sidebar{order:2}
+    .canvas-area{order:1}
+  }
+  .canvas-area{
+    background: #0b0f14; padding:12px; border:1px solid var(--canvasBorder); border-radius:14px;
+  }
+  canvas{width:100%; height:auto; max-height:70vh; border:2px solid var(--canvasBorder); background:#0b1016}
+  .sidebar{
+    background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:14px;
+    position:sticky; top:12px; align-self:start;
+  }
+  h3,h4{margin:6px 0 10px}
+  .game-info,.player-list,.controls,.scores{
+    background:var(--card); border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:12px;
+  }
+  .player{padding:6px 8px; border-radius:8px; margin:4px 0; background:#131922}
+  .player.painter{background:#3a2b00; color:#fff7d6; font-weight:700}
+  .hidden{display:none}
+  input,button,label select{
+    width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--border);
+    background:#0f141b; color:var(--text); outline:none; margin:6px 0;
+  }
+  input:focus{border-color:var(--accent); box-shadow:0 0 0 3px rgba(59,130,246,.15)}
+  button{background:linear-gradient(180deg,#3b82f6,#2563eb); border:none; font-weight:600; cursor:pointer}
+  button.secondary{background:#1e293b}
+  #wordToShow{background:#2b1f00; color:#fff1c2; border:1px dashed #8b6b00}
+  /* countdown bar */
+  .barWrap{height:10px; background:#1b2431; border-radius:999px; overflow:hidden; border:1px solid var(--border); margin-top:6px}
+  .bar{height:100%; width:100%}
+</style>
     body { font-family: Arial, sans-serif; margin: 20px; }
     .game-container { display: flex; gap: 20px; }
     .canvas-area { flex: 1; }
@@ -20,90 +62,11 @@
     .scores { margin-top: 20px; }
     .score-item { display: flex; justify-content: space-between; padding: 5px; }
   </style>
-<meta charset="UTF-8" />
-<title>Matematik Oyunu</title>
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&display=swap" rel="stylesheet">
-<script src="/socket.io/socket.io.js"></script>
-<script type="module" src="/engine.js"></script>
-
-<style>
-  :root{
-    --parchment:#f6efe1; --paper:#fffdf6; --ink:#2b1d0e; --muted:#6b5641;
-    --gold:#b38a3e; --border:#d8c7a3; --ok:#2e7d32; --warn:#d97706; --danger:#b91c1c;
-  }
-  *{box-sizing:border-box}
-  body{margin:0; color:var(--ink); font-family:"Libre Baskerville", Georgia, serif;
-    background:
-      radial-gradient(1200px 700px at 50% 0%, #f8f1e6 0%, #efe3cd 60%, #e6d5b5 100%),
-      repeating-linear-gradient(10deg, #0000 0 24px, #00000006 24px 25px);
-  }
-
-  .shell{max-width:1100px; margin:24px auto; padding:24px; background:var(--parchment);
-    border:1px solid var(--gold); border-radius:10px; box-shadow:0 14px 40px rgba(0,0,0,.18); position:relative;
-  }
-  .shell::before{content:""; position:absolute; inset:10px; border:3px double var(--gold); border-radius:8px; pointer-events:none;}
-
-  /* ÜST PANEL (yatay şerit) */
-  .topbar{
-    background:var(--paper); border:1px solid var(--border); border-radius:10px;
-    padding:10px 12px; display:grid; grid-template-columns: 1fr auto auto; gap:10px; align-items:center;
-    box-shadow: inset 0 0 0 1px #ffffff80;
-    margin-bottom:14px;
-  }
-  .ctrls{display:flex; gap:8px; flex-wrap:wrap}
-  .input, .btn{
-    padding:8px 10px; border-radius:8px; border:1px solid var(--border); background:#fffdf9; font-size:14px;
-  }
-  .btn{font-weight:700; background:linear-gradient(#e9d6a6,#d6b86a); border-color:#8a6a2a; cursor:pointer}
-  .btn:hover{filter:brightness(1.04)}
-  .pill{padding:6px 10px; border:1px solid var(--border); border-radius:999px; background:#fffdf9; font-size:14px}
-  .timerWrap{min-width:160px}
-  .barWrap{height:8px; background:#efe6d1; border:1px solid var(--border); border-radius:999px; overflow:hidden}
-  .bar{height:100%; width:100%; background:linear-gradient(90deg,#b38a3e,#caa75b)}
-
-  /* KAĞIT ÇERÇEVE + CANVAS */
-  .paper{
-    background:var(--paper); border:1px solid var(--border); border-radius:6px; padding:16px;
-    box-shadow: inset 0 0 0 1px #ffffff80, 0 10px 24px rgba(0,0,0,.12);
-  }
-  .canvasBox{position:relative}
-  #canvas{display:block; width:100%; height:auto; background:#fff; border:2px solid #d9c9a8}
-
-  /* SAĞ-ALT SKOR KARTI (yüzen) */
-  .scores{
-    position:fixed; right:24px; bottom:24px; width:260px;
-    background:var(--paper); border:1px solid var(--border); border-radius:12px; padding:12px;
-    box-shadow:0 10px 24px rgba(0,0,0,.18), inset 0 0 0 1px #ffffff80;
-  }
-  .scores h3{margin:0 0 8px; font-size:16px; border-bottom:1px solid var(--border); padding-bottom:6px}
-  .row{display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px dashed #e4d7bf}
-  .row:last-child{border-bottom:0}
-
-  /* Tahmin girişi sadece viewer'a */
-  .guess{display:flex; gap:8px; align-items:center}
-  .hide{display:none !important}
-  @media (max-width: 1200px){ .scores{position:absolute; right:16px; bottom:16px} }
-</style>
 </head>
-
 <body>
   <div class="game-container">
     <div class="canvas-area">
       <canvas id="canvas" width="800" height="600" style="border:2px solid #333"></canvas>
-<div class="shell">
-  <!-- Üst panel -->
-  <div class="topbar">
-    <!-- 1) Çizim kontrolleri (sadece painter aktif) -->
-    <div class="ctrls" id="drawCtrls">
-      <input id="expr" class="input" placeholder="y=sin(x) veya (x^2 + y^2 = 9)" />
-      <input id="xmin" class="input" style="width:90px" placeholder="x min" value="-10" />
-      <input id="xmax" class="input" style="width:90px" placeholder="x max" value="10" />
-      <input id="dx" class="input" style="width:80px" placeholder="dx" value="0" />
-      <input id="dy" class="input" style="width:80px" placeholder="dy" value="0" />
-      <input id="theta" class="input" style="width:100px" placeholder="θ (derece)" value="0" />
-      <button id="send" class="btn">Gönder</button>
-      <button id="clear" class="btn">Temizle</button>
     </div>
     <div class="sidebar">
       <div class="game-info">
@@ -112,6 +75,7 @@
         <p id="currentPainter"></p>
         <p><strong>Oda:</strong> <span id="roomLabel"></span></p>
         <p><strong>Süre:</strong> <span id="countdown">--:--</span></p>
+        <div class="barWrap"><div id="timebar" class="bar"></div></div>
         <p id="wordHint" class="hidden"></p>
       </div>
 
@@ -119,8 +83,6 @@
         <h4>Oyuncular</h4>
         <div id="playersList"></div>
       </div>
-    <!-- 2) Kelime (painter'a açık), Viewer'a “?” -->
-    <div class="pill" id="wordBox">Kelime: <span id="wordTxt">?</span></div>
 
       <div class="controls">
         <div id="painterControls" class="hidden">
@@ -147,12 +109,7 @@
       <div class="scores">
         <h4>Skorlar</h4>
         <div id="scoresList"></div>
-    <!-- 3) Sayaç -->
-    <div class="timerWrap">
-      <div style="display:flex; justify-content:space-between; font-weight:700; margin-bottom:4px">
-        <span>Süre</span><span id="countdown">03:00</span>
       </div>
-      <div class="barWrap"><div id="timebar" class="bar"></div></div>
     </div>
   </div>
 
@@ -353,12 +310,6 @@
         document.getElementById('gameStatus').textContent = `Tur bitti. Kelime: ${word}`;
       }
     });
-  <!-- Canvas (defter sayfası) -->
-  <div class="paper">
-    <div class="canvasBox">
-      <canvas id="canvas" width="900" height="600"></canvas>
-    </div>
-  </div>
 
     socket.on('newGame', data => {
       const me = data.roles.find(p => p.id === socket.id);
@@ -375,147 +326,30 @@
       engine.render(graphs);
       clearInterval(timerInterval);
       remainingTime = 180;
+      const ROUND_TOTAL = 180; // saniye
+function updateCountdown() {
+  const min = Math.floor(remainingTime / 60).toString().padStart(2, '0');
+  const sec = (remainingTime % 60).toString().padStart(2, '0');
+  document.getElementById('countdown').textContent = `${min}:${sec}`;
+
+  // ---- Progress bar ----
+  const pct = Math.max(0, Math.min(1, remainingTime / ROUND_TOTAL));
+  const bar = document.getElementById('timebar');
+  if (bar){
+    bar.style.width = (pct*100).toFixed(2) + '%';
+    // renk: >60% mavi, 60-30% sarı, <30% kırmızı
+    let color = 'linear-gradient(90deg,#3b82f6,#2563eb)';
+    if (pct <= 0.6 && pct > 0.3) color = 'linear-gradient(90deg,#f59e0b,#d97706)';
+    if (pct <= 0.3) color = 'linear-gradient(90deg,#ef4444,#b91c1c)';
+    bar.style.background = color;
+  }
+}
       updateCountdown(); // hemen başlat
       timerInterval = setInterval(() => {
         remainingTime--;
         updateCountdown();
         if (remainingTime <= 0) clearInterval(timerInterval);
       }, 1000);
-  <!-- Tahmin (yalnız viewer) -->
-  <div class="topbar" id="guessBar">
-    <div class="guess">
-      <strong>Tahmin:</strong>
-      <input id="guessInput" class="input" placeholder="kelime tahmini..." style="width:260px" />
-      <button id="guessBtn" class="btn">Gönder</button>
-    </div>
-    <div class="pill" style="justify-self:end; grid-column:3/4">Oda: <span id="roomName">-</span></div>
-  </div>
-</div>
-
-<!-- Skor paneli (sağ-alt) -->
-<aside class="scores" id="scores">
-  <h3>Skorlar</h3>
-  <div id="scoresBody"></div>
-</aside>
-
-<script type="module">
-  import { GraphEngine } from '/engine.js';
-  const socket = io();
-
-  /* ==== Canvas + Engine ==== */
-  const canvas = document.getElementById('canvas');
-  const eng = new GraphEngine(canvas);
-  let graphs = [];
-
-  function rerender(){ eng.render(graphs); }
-  window.addEventListener('resize', rerender);
-
-  /* ==== UI elemanları ==== */
-  const drawCtrls = document.getElementById('drawCtrls');
-  const expr = document.getElementById('expr');
-  const xmin = document.getElementById('xmin');
-  const xmax = document.getElementById('xmax');
-  const dx   = document.getElementById('dx');
-  const dy   = document.getElementById('dy');
-  const theta= document.getElementById('theta');
-  const send = document.getElementById('send');
-  const clear= document.getElementById('clear');
-
-  const wordTxt = document.getElementById('wordTxt');
-  const roomNameEl = document.getElementById('roomName');
-
-  const guessBar = document.getElementById('guessBar');
-  const guessInput = document.getElementById('guessInput');
-  const guessBtn = document.getElementById('guessBtn');
-
-  const scoresBody = document.getElementById('scoresBody');
-
-  /* ==== Sayaç ==== */
-  const ROUND_TOTAL = 180;
-  let remaining = ROUND_TOTAL; let timerId = null;
-  function setCountdown(sec){
-    remaining = Math.max(0, sec|0);
-    const m = String(Math.floor(remaining/60)).padStart(2,'0');
-    const s = String(remaining%60).padStart(2,'0');
-    document.getElementById('countdown').textContent = `${m}:${s}`;
-    // bar
-    const pct = Math.max(0, Math.min(1, remaining / ROUND_TOTAL));
-    const bar = document.getElementById('timebar');
-    bar.style.width = (pct*100).toFixed(2)+'%';
-    if (pct <= .3) bar.style.background = 'linear-gradient(90deg,#ef4444,#b91c1c)';
-    else if (pct <= .6) bar.style.background = 'linear-gradient(90deg,#f59e0b,#d97706)';
-    else bar.style.background = 'linear-gradient(90deg,#b38a3e,#caa75b)';
-  }
-  function startTimer(){
-    clearInterval(timerId); setCountdown(ROUND_TOTAL);
-    timerId = setInterval(()=>{ setCountdown(remaining-1); if(remaining<=0) clearInterval(timerId); },1000);
-  }
-  function stopTimer(){ clearInterval(timerId); }
-
-  /* ==== URL paramları ==== */
-  const params = new URLSearchParams(location.search);
-  const room = params.get('room'); const name = params.get('name');
-  roomNameEl.textContent = room || '-';
-
-  /* ==== Socket olayları ==== */
-  socket.emit('join', { room, user: { name } });
-
-  // Grafikler
-  socket.on('graphs', arr => { graphs = arr; rerender(); });
-  socket.on('clearCanvas', () => { graphs = []; rerender(); });
-
-  // Kullanıcı listesi -> skorları da yenileyelim (isimleri göstermek için)
-  socket.on('users', users => { renderScores(users); });
-
-  // Yeni tur / kelime
-  socket.on('newGame', ({ room: r }) => {
-    startTimer();
-    wordTxt.textContent = '?'; // painter gelene kadar gizli
-  });
-  socket.on('wordForPainter', word => {
-    wordTxt.textContent = word; // sadece painter alır
-  });
-
-  // Tur bitti
-  socket.on('round:end', ({ word, scores }) => {
-    stopTimer(); wordTxt.textContent = word;
-    renderScoresById(scores);
-  });
-
-  // Oyun sonu
-  socket.on('gameOver', scores => {
-    stopTimer(); renderScoresById(scores);
-  });
-
-  // Tahmin sonucu
-  socket.on('guessResult', ({ correct, scores }) => {
-    if (correct) renderScoresById(scores);
-  });
-
-  /* ==== Rol bilgisi ile UI kilitleme ==== */
-  let myRole = 'viewer';
-  socket.on('game:state', ({ players }) => {
-    const me = players.find(p => p.name === name);
-    myRole = me?.role || 'viewer';
-    const painter = myRole === 'painter';
-
-    // painter: çizim aktif, guessBar gizli
-    drawCtrls.classList.toggle('hide', !painter);
-    guessBar.classList.toggle('hide', painter);
-  });
-
-  /* ==== Çizim işlemleri ==== */
-  function toRadians(deg){ return (Number(deg)||0) * Math.PI / 180; }
-  send.onclick = () => {
-    const gstr = (expr.value||'').trim();
-    if (!gstr) return;
-    const type = GraphEngine.detectGraphType(gstr);
-    const graph = GraphEngine.compileGraph({
-      type,
-      expr: gstr,
-      color: '#4a3820',
-      xmin: Number(xmin.value||-10),
-      xmax: Number(xmax.value||10),
     });
 
     function updateCountdown() {
@@ -527,31 +361,6 @@
     socket.on('wordForPainter', word => {
       currentWord = word;
       document.getElementById('wordToShow').innerHTML = `<strong>Çizmen gereken kelime: ${word}</strong>`;
-    // dönüş/öteleme
-    graph.dx = Number(dx.value||0);
-    graph.dy = Number(dy.value||0);
-    graph.theta = toRadians(theta.value||0);
-
-    socket.emit('addGraph', { room, graph });
-  };
-  clear.onclick = () => socket.emit('clearCanvas', { room });
-
-  /* ==== Tahmin ==== */
-  guessBtn.onclick = () => {
-    const guess = (guessInput.value||'').trim();
-    if (!guess) return;
-    socket.emit('guess', { room, guess });
-    guessInput.value = '';
-  };
-
-  /* ==== Skorlar ==== */
-  function renderScores(users){
-    scoresBody.innerHTML = '';
-    (users||[]).forEach(u => {
-      const row = document.createElement('div');
-      row.className = 'row';
-      row.innerHTML = `<span>${u.name}</span><span id="sc_${u.id}">0</span>`;
-      scoresBody.appendChild(row);
     });
 
     socket.on('gameOver', finalScores => {
@@ -559,13 +368,7 @@
       renderScores(scores);
       document.getElementById('gameStatus').textContent = 'Oyun bitti!';
       alert('Oyun bitti! Tüm oyuncular çizdi.');
-  }
-  function renderScoresById(scores){
-    Object.entries(scores||{}).forEach(([id, sc]) => {
-      const el = document.getElementById('sc_'+id);
-      if (el) el.textContent = sc;
     });
-  }
 
     socket.on('guessResult', res => {
       if (res.correct) {
@@ -577,8 +380,5 @@
       }
     });
   </script>
-  // İlk çizim
-  rerender();
-</script>
 </body>
 </html>
