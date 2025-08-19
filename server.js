@@ -1,4 +1,4 @@
-// Çok odalı ve çok oyunculu matematik tahmin oyunu sunucusu (state machine ile güçlendirildi)
+// Çok odalı ve çok oyunculu matematik tahmin oyunu sunucusu (optimal süre senkronizasyonu)
 
 const express = require("express");
 const app = express();
@@ -8,7 +8,7 @@ const { Server } = require("socket.io");
 const io = new Server(server);
 const path = require("path");
 
-// 🔽 Public klasör
+// 📽 Public klasör
 app.use(express.static(path.join(__dirname, "public")));
 
 // ---- ODA DURUMU ----
@@ -61,7 +61,7 @@ function broadcastRoomList() {
   io.emit("roomList", list);
 }
 
-// ---- YENİ: Durum makinesi yardımcıları ----
+// ---- Durum makinesi yardımcıları ----
 function ensureRoom(roomId, { isPrivate = false, maxUsers = 6 } = {}) {
   if (!rooms.has(roomId)) {
     rooms.set(roomId, {
@@ -77,6 +77,7 @@ function ensureRoom(roomId, { isPrivate = false, maxUsers = 6 } = {}) {
       timers: { round: null, inter: null },
       state: "LOBBY", // LOBBY | ROUND | INTERMISSION | GAME_OVER
       cfg: { roundSec: 180, interSec: 2, loopSets: true },
+      roundStartTime: null,  // Round başlangıç zamanı
     });
   }
   return rooms.get(roomId);
@@ -100,7 +101,7 @@ function emitGameState(roomId) {
   });
 }
 
-// ---- YENİ: Ana giriş ----
+// ---- Ana giriş ----
 function gameStart(roomId, options = {}) {
   const r = rooms.get(roomId);
   if (!r) return;
@@ -112,7 +113,7 @@ function gameStart(roomId, options = {}) {
   startRound(roomId);
 }
 
-// ---- YENİ: Tur başlat / bitir ----
+// ---- Tur başlat / bitir ----
 function startRound(roomId) {
   const r = rooms.get(roomId);
   if (!r || !r.inGame) return;
@@ -146,12 +147,20 @@ function startRound(roomId) {
   r.word = pickRandomWord();
   r.graphs = [];
 
+  // Round başlangıç zamanını kaydet
+  r.roundStartTime = Date.now();
+
   // Client bilgilendirme
   r.state = "ROUND";
   emitGameState(roomId);
 
-  // GERİYE UYUMLU: mevcut client 'newGame' + painter'a kelime
-  io.to(roomId).emit("newGame", { room: roomId, roles: r.users });
+  // Client'lara round bilgisini gönder (süre bilgileriyle)
+  io.to(roomId).emit("newGame", { 
+    room: roomId, 
+    roles: r.users,
+    roundStartTime: r.roundStartTime,  // Başlangıç zamanı
+    roundDuration: r.cfg.roundSec       // Toplam süre (saniye)
+  });
   io.to(next.id).emit("wordForPainter", r.word);
 
   // Round timer
@@ -163,6 +172,9 @@ function endRound(roomId, reason) {
   const r = rooms.get(roomId);
   if (!r) return;
   clearTimeout(r.timers.round);
+
+  // Round başlangıç zamanını temizle
+  r.roundStartTime = null;
 
   // GERİYE UYUMLU: eski akış kelimeyi tur sonunda göstermek istiyorsa
   io.to(roomId).emit("round:end", { reason, word: r.word, scores: r.scores });
@@ -190,7 +202,7 @@ function startGameIfReady(roomId) {
   const r = rooms.get(roomId);
   if (!r || r.inGame) return;
   if (r.users.length >= 2) {
-    gameStart(roomId); // YENİ: tek giriş 
+    gameStart(roomId);
     broadcastRoomList();
   }
 }
@@ -222,9 +234,15 @@ io.on("connection", (socket) => {
     socket.emit("graphs", r.graphs);
     io.to(room).emit("users", r.users);
 
-    if (r.inGame && r.currentPainter) {
-      // Devam eden tur bilgisi: GERİYE UYUMLU
-      socket.emit("newGame", { room, roles: r.users });
+    // Devam eden oyuna katılıyorsa
+    if (r.inGame && r.currentPainter && r.roundStartTime) {
+      socket.emit("newGame", { 
+        room, 
+        roles: r.users,
+        roundStartTime: r.roundStartTime,  // Mevcut round'un başlangıç zamanı
+        roundDuration: r.cfg.roundSec       // Toplam süre
+      });
+      
       if (socket.id === r.currentPainter) {
         socket.emit("wordForPainter", r.word);
       }
@@ -265,8 +283,6 @@ io.on("connection", (socket) => {
         scores: r.scores,
         guesser: user.name,
       });
-      // Önceki: clearTimeout + 2sn sonra pickNextPainter
-      // YENİ: turu standart şekilde bitir
       endRound(room, "guessed");
     } else {
       socket.emit("guessResult", { correct: false });
@@ -307,7 +323,7 @@ io.on("connection", (socket) => {
         endRound(name, "timeout");
       }
 
-      // Oyuncu sayısı 2'nin altına düştüyse oyunu bitir (geriye uyumlu davranış)
+      // Oyuncu sayısı 2'nin altına düştüyse oyunu bitir
       if (r.users.length < 2) {
         r.inGame = false;
         r.state = "GAME_OVER";
