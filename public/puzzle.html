@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Mathematical Art Puzzle</title>
+
+<!-- Font (isteğe bağlı) -->
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --parchment:#f6efe1; --paper:#fffdf6; --ink:#2b1d0e; --muted:#6b5641;
+    --gold:#b38a3e; --border:#d8c7a3; --shadow:0 14px 40px rgba(0,0,0,.18);
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;padding:20px;min-height:100vh;color:var(--ink);
+    font-family:"Libre Baskerville", Georgia, serif;
+    background:
+      radial-gradient(1200px 700px at 50% 0%, #f8f1e6 0%, #efe3cd 60%, #e6d5b5 100%),
+      repeating-linear-gradient(10deg, #0000 0 24px, #00000006 24px 25px);
+  }
+  .frame{
+    max-width:1200px;margin:28px auto;padding:20px;background:var(--parchment);
+    border:1px solid var(--gold);border-radius:10px;box-shadow:var(--shadow);position:relative;
+  }
+  .frame::before{content:"";position:absolute;inset:10px;border:3px double var(--gold);border-radius:8px;pointer-events:none}
+  .game{background:var(--paper);border:1px solid var(--border);border-radius:12px;padding:20px;box-shadow:inset 0 0 0 1px #ffffff80}
+  .header{text-align:center;border-bottom:1px solid var(--border);padding-bottom:12px;margin-bottom:16px}
+  .header h1{margin:0 0 10px;font-variant:small-caps;letter-spacing:.02em}
+  .stats{display:flex;gap:12px;justify-content:center;color:var(--muted);font-weight:600}
+  .stats strong{color:var(--ink);margin-left:4px}
+
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:16px 0}
+  .card{position:relative;background:#fffdf9;border:1px solid var(--border);border-radius:12px;padding:12px}
+  .label{position:absolute;top:-12px;left:16px;background:var(--paper);border:1px solid var(--border);border-radius:12px;padding:4px 10px;font-size:12px;color:var(--muted);font-weight:700}
+  canvas{display:block;width:100%;height:360px;background:#fffaf0;border:1px solid #d8c7a3;border-radius:10px}
+  .similarity{height:8px;background:#f1e6cb;border:1px solid var(--border);border-radius:6px;margin-top:8px;overflow:hidden}
+  .fill{height:100%;width:0%;background:linear-gradient(90deg,#d6b86a,#b38a3e);transition:width .3s}
+
+  .section{background:var(--paper);border:1px solid var(--border);border-radius:12px;padding:14px;margin:12px 0;box-shadow:inset 0 0 0 1px #ffffff80}
+  .blocks{display:flex;flex-wrap:wrap;gap:10px;padding:12px;background:#f9f5ed;border:1px dashed var(--border);border-radius:10px;min-height:68px}
+  .drop{display:flex;flex-wrap:wrap;gap:8px;align-items:center;min-height:68px;padding:12px;border:2px dashed var(--border);border-radius:10px;background:#fffdf9}
+  .drop.drag{background:#f4ead5;border-color:var(--gold)}
+  .block{
+    padding:8px 12px;border-radius:8px;font:700 14px/1 'Courier New', monospace;cursor:move;user-select:none;
+    border:1px solid #00000014;box-shadow:0 2px 4px #0000001f;transition:transform .15s
+  }
+  .block:hover{transform:translateY(-1px)}
+  .block.term{background:linear-gradient(135deg,#7b9b7b,#5e7b5e);color:#fff}
+  .block.operator{background:linear-gradient(135deg,#d4a574,#b8935f);color:var(--ink)}
+  .block.number{background:linear-gradient(135deg,#9b7b9b,#7b5e7b);color:#fff}
+  .block.comparison{background:linear-gradient(135deg,#7b9b9b,#5e7b7b);color:#fff}
+  .block.function{background:linear-gradient(135deg,#9b7b7b,#7b5e5e);color:#fff}
+  .block.bracket{background:linear-gradient(135deg,#8b8b7b,#6b6b5e);color:#fff}
+
+  .controls{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:8px}
+  button{
+    padding:10px 14px;border:1px solid #8a6a2a;border-radius:10px;cursor:pointer;
+    background:linear-gradient(#e9d6a6,#d6b86a);color:#3a2a0d;font-weight:700
+  }
+  button.secondary{background:linear-gradient(#efe3cd,#e0d0b0)}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .box{background:var(--paper);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center}
+  .big{font-size:22px;font-weight:800;color:var(--gold)}
+  .formula{font:14px 'Courier New', monospace;color:var(--muted);margin-top:8px;min-height:20px}
+  @keyframes goldPulse{0%{box-shadow:0 0 0 0 rgba(179,138,62,.7)}50%{box-shadow:0 0 20px 10px rgba(179,138,62,0)}100%{box-shadow:0 0 0 0 rgba(179,138,62,0)}}
+  .glow{animation:goldPulse 1s}
+</style>
+</head>
+<body>
+<main class="frame">
+  <div class="game">
+    <div class="header">
+      <h1>⚜️ Mathematical Art Puzzle ⚜️</h1>
+      <div class="stats">
+        <span>Level <strong id="levelNum">1</strong></span>
+        <span>Benzerlik <strong id="simTxt">0</strong>%</span>
+        <span>İpucu <strong id="hintCnt">3</strong></span>
+        <span>Puan <strong id="totalTxt">0</strong></span>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <span class="label">🎯 Hedef Şekil</span>
+        <canvas id="cvTarget"></canvas>
+      </div>
+      <div class="card" id="userCard">
+        <span class="label">🎨 Senin Çizimin</span>
+        <canvas id="cvUser"></canvas>
+        <div class="similarity"><div id="simBar" class="fill"></div></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h3>📦 Yapboz Parçaları</h3>
+      <div id="palette" class="blocks"></div>
+    </div>
+
+    <div class="section">
+      <h3>🔧 Formül Oluşturma Alanı</h3>
+      <div id="drop" class="drop"></div>
+      <div id="formula" class="formula"></div>
+    </div>
+
+    <div class="controls">
+      <button class="secondary" id="btnClear">🗑️ Temizle</button>
+      <button id="btnHint">💡 İpucu Al</button>
+      <button id="btnShuffle">🔀 Karıştır</button>
+      <button id="btnCheck">✅ Kontrol Et</button>
+      <button id="btnNew">🎲 Yeni Şekil</button>
+    </div>
+
+    <div class="row" style="margin-top:12px">
+      <div class="box">
+        <div>Skor</div>
+        <div id="scoreTxt" class="big">0</div>
+      </div>
+      <div class="box">
+        <div>İpucu</div>
+        <div id="hintTxt" style="min-height:24px;color:var(--muted);font-style:italic"></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- engine.js ESM: GraphEngine'i içe aktar ve inline API'yi adapte et -->
+<script type="module">
+  import { GraphEngine } from './engine.js';
+
+  // Eşitsizliği kontur çizimi için "sol - sağ = 0" formuna çevir
+  function toImplicitBoundary(expr){
+    const m = expr && expr.match(/^(.*?)(<=|>=|<|>)(.*)$/);
+    return m ? `(${m[1].trim()}) - (${m[3].trim()})` : expr;
+  }
+
+  // Inline sürümdeki "render(expr)" davranışını taklit eden ufak adaptör
+  function renderExpr(engine, expr, color){
+    engine.clear(); engine.drawGrid(); engine.drawAxes();
+    if (!expr) return;
+    const e = toImplicitBoundary(expr);
+    const g = GraphEngine.compileGraph({
+      type:'implicit', expr:e, xmin:-10, xmax:10, pointSize:2, color
+    });
+    if (g.isValid) engine.render([g]);
+  }
+
+  // ---- Oyun durumu ve UI ----
+  const cvT = document.getElementById('cvTarget');
+  const cvU = document.getElementById('cvUser');
+  cvT.width = cvU.width = 600;
+  cvT.height = cvU.height = 360;
+
+  const engT = new GraphEngine(cvT,35);
+  const engU = new GraphEngine(cvU,35);
+
+  const el = (id)=>document.getElementById(id);
+  const state = {
+    level:1, total:0, hint:3, current:null, blocks:[], constructed:"",
+    shapes:[
+      {name:"Daire",  f:"x^2 + y^2 < 9",                  diff:1, hint:"Daire: x² + y² ..."},
+      {name:"Elips",  f:"x^2/9 + y^2/4 < 1",              diff:2, hint:"Elips: x²/a² + y²/b² ..."},
+      {name:"Kare",   f:"abs(x) + abs(y) < 3",            diff:2, hint:"Mutlak değer köşeler yapar"},
+      {name:"Dalga",  f:"y < sin(x*2) + 2",               diff:3, hint:"sin(...) dalga üretir"},
+      {name:"Hiper",  f:"x*y < 4",                        diff:2, hint:"x·y çarpımı hiperbolik bölgeler"},
+      {name:"Kalp",   f:"(x^2 + y^2 - 4)^3 < x^2 * y^3",  diff:4, hint:"Kalp: parantez ve üsler"},
+      {name:"Parabol",f:"y < x^2/3",                      diff:2, hint:"Parabol: x² terimi"},
+      {name:"Hiper-2",f:"x^2 - y^2 < 4",                  diff:2, hint:"x² - y² farkı"},
+      {name:"Kare-2", f:"max(abs(x),abs(y)) < 3",         diff:3, hint:"max(abs(x),abs(y)) kare sınır"},
+      {name:"Desen",  f:"sin(x) * cos(y) < 0.5",          diff:3, hint:"trig fonksiyonlar desen verir"},
+    ]
+  };
+
+  function randShape(){ return state.shapes[Math.floor(Math.random()*state.shapes.length)]; }
+
+  function tokenize(formula){
+    const toks=[]; let cur=""; const ops="+-*/^<>=()";
+    for(const ch of formula){
+      if (ch===" ") { if(cur){toks.push(cur);cur=""} continue }
+      if (ops.includes(ch)) { if(cur){toks.push(cur);cur=""} toks.push(ch) }
+      else cur += ch;
+    }
+    if(cur) toks.push(cur);
+    // x ^ 2 birleştir (x^2)
+    const merged=[];
+    for (let i=0;i<toks.length;i++){
+      if (toks[i]==="^" && i>0 && i<toks.length-1){
+        const base = merged.pop();
+        merged.push(base+"^"+toks[i+1]); i++;
+      } else merged.push(toks[i]);
+    }
+    return merged;
+  }
+
+  function blockType(t){
+    if ("+-*/^".includes(t)) return "operator";
+    if ("<=>".includes(t))  return "comparison";
+    if (t==="(" || t===")") return "bracket";
+    if (!isNaN(t))          return "number";
+    if (/sin|cos|abs|max|min|sqrt|atan2/.test(t)) return "function";
+    return "term";
+  }
+
+  function makeBlocks(formula, diff){
+    const toks = tokenize(formula);
+    const core = toks.map(v => ({type:blockType(v), value:v}));
+
+    const extrasPool = [
+      {type:"number", value:String(1+Math.floor(Math.random()*9))},
+      {type:"operator", value:"+"},{type:"operator", value:"-"},
+      {type:"operator", value:"*"},{type:"operator", value:"/"},
+      {type:"term", value:"x"},{type:"term", value:"y"},
+      {type:"term", value:"x^2"},{type:"term", value:"y^2"},
+      {type:"function", value:"sin("},{type:"function", value:"cos("},
+      {type:"function", value:"abs("},{type:"comparison", value:">"}
+    ].filter(b => !formula.includes(b.value) && !(diff<3 && b.type==="function"));
+
+    const count = Math.min(2*diff,5);
+    for(let i=0;i<count && extrasPool.length;i++){
+      const k = Math.floor(Math.random()*extrasPool.length);
+      core.push(extrasPool.splice(k,1)[0]);
+    }
+
+    for(let i=core.length-1;i>0;i--){
+      const j=Math.floor(Math.random()*(i+1)); [core[i],core[j]]=[core[j],core[i]];
+    }
+    return core;
+  }
+
+  function renderPalette(){
+    const pal = el('palette'); pal.innerHTML="";
+    state.blocks.forEach((b,idx)=>{
+      const d=document.createElement('div');
+      d.className=`block ${b.type}`; d.textContent=b.value;
+      d.draggable=true; d.dataset.idx=idx; d.dataset.val=b.value; d.dataset.type=b.type;
+      d.addEventListener('dragstart', ev=>{ ev.dataTransfer.setData('text/plain', JSON.stringify(b)); });
+      pal.appendChild(d);
+    });
+  }
+
+  function setFormulaFromDrop(){
+    const drop = el('drop');
+    const parts = [...drop.children].map(c=>c.dataset.val);
+    state.constructed = parts.join(' ');
+    el('formula').textContent = state.constructed;
+    drawUser();
+  }
+
+  function attachDrop(){
+    const drop = el('drop');
+    drop.addEventListener('dragover', e=>{ e.preventDefault(); drop.classList.add('drag') });
+    drop.addEventListener('dragleave', ()=> drop.classList.remove('drag'));
+    drop.addEventListener('drop', e=>{
+      e.preventDefault(); drop.classList.remove('drag');
+      let data; try{ data = JSON.parse(e.dataTransfer.getData('text/plain')||'') }catch(_){}
+      if(!data) return;
+      const n=document.createElement('div');
+      n.className=`block ${data.type}`; n.textContent=data.value;
+      n.dataset.val=data.value; n.dataset.type=data.type;
+      n.draggable=true;
+      n.addEventListener('dragstart', ev=>{ ev.dataTransfer.setData('text/plain', JSON.stringify({type:n.dataset.type,value:n.dataset.val})) });
+      n.addEventListener('dblclick', ()=>{ n.remove(); setFormulaFromDrop() });
+      drop.appendChild(n);
+      setFormulaFromDrop();
+    });
+  }
+
+  function drawTarget(){
+    renderExpr(engT, state.current.f, '#7b9b7b');
+  }
+
+  function drawUser(){
+    renderExpr(engU, state.constructed, '#7b5e7b');
+    updateSimilarity();
+  }
+
+  function contentMask(ctx, w, h){
+    const id = ctx.getImageData(0,0,w,h).data;
+    const mask = new Uint8Array((w*h));
+    for(let i=0, p=0; i<id.length; i+=16, p++){
+      const a = id[i+3];
+      const r = id[i], g = id[i+1], b = id[i+2];
+      const isGrid = (r>200 && g>180 && b>150) || (r===139 && g===111 && b===62);
+      mask[p] = (a>100 && !isGrid) ? 1 : 0;
+    }
+    return mask;
+  }
+
+  function jaccard(maskA, maskB){
+    let inter=0, union=0;
+    const n = Math.min(maskA.length, maskB.length);
+    for(let i=0;i<n;i++){
+      const a=maskA[i], b=maskB[i];
+      if (a|b) union++;
+      if (a&b) inter++;
+    }
+    return union ? inter/union : 0;
+  }
+
+  function updateSimilarity(){
+    const tctx=cvT.getContext('2d'), uctx=cvU.getContext('2d');
+    const mT = contentMask(tctx, cvT.width, cvT.height);
+    const mU = contentMask(uctx, cvU.width, cvU.height);
+    let s = jaccard(mT, mU) * 100;
+    s = Math.min(100, Math.round(s*2));
+    el('simTxt').textContent = s;
+    el('simBar').style.width = s + '%';
+    if (s>85) onSuccess(s);
+  }
+
+  function onSuccess(sim){
+    const score = Math.round(sim * state.current.diff);
+    state.total += score;
+    el('scoreTxt').textContent = score;
+    el('totalTxt').textContent = state.total;
+    el('hintTxt').textContent = `Harika! +${score} puan`;
+    el('userCard').classList.add('glow');
+    setTimeout(()=>el('userCard').classList.remove('glow'), 900);
+  }
+
+  function newLevel(){
+    state.current = randShape();
+    state.blocks = makeBlocks(state.current.f, state.current.diff);
+    state.constructed = "";
+    el('drop').innerHTML=""; el('formula').textContent="";
+    renderPalette(); drawTarget(); drawUser();
+    el('levelNum').textContent = state.level;
+    el('hintCnt').textContent = state.hint;
+    el('hintTxt').textContent = "";
+    el('scoreTxt').textContent = "0";
+  }
+
+  // Kontroller
+  el('btnClear').onclick = ()=>{ el('drop').innerHTML=""; setFormulaFromDrop() };
+  el('btnShuffle').onclick = ()=>{ state.blocks.sort(()=>Math.random()-.5); renderPalette() };
+  el('btnHint').onclick = ()=>{
+    if (state.hint>0){ state.hint--; el('hintCnt').textContent=state.hint; el('hintTxt').textContent=state.current.hint; setTimeout(()=>el('hintTxt').textContent="", 4500) }
+    else { el('hintTxt').textContent='İpucu hakkın bitti!' }
+  };
+  el('btnCheck').onclick = ()=> updateSimilarity();
+  el('btnNew').onclick = ()=>{ state.level++; state.hint=3; newLevel(); };
+
+  // başlat
+  attachDrop();
+  newLevel();
+</script>
+</body>
+</html>
