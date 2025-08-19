@@ -208,8 +208,11 @@
     let currentWord = '';
     let players = [];
     let scores = {};
-    let remainingTime = 180; // saniye
     let timerInterval;
+    
+    // Süre senkronizasyonu için değişkenler
+    let roundStartTime = null;
+    let roundDuration = 180; // saniye cinsinden varsayılan
 
     // URL parametreleri
     const params = new URLSearchParams(location.search);
@@ -255,6 +258,36 @@
       const isPainter = role === 'painter';
       document.getElementById('painterControls').classList.toggle('hidden', !isPainter);
       document.getElementById('viewerControls').classList.toggle('hidden',  isPainter);
+    }
+
+    // Süre güncelleme fonksiyonu
+    function updateCountdown() {
+      if (!roundStartTime) {
+        // Round aktif değilse varsayılan göster
+        document.getElementById('countdown').textContent = '--:--';
+        document.getElementById('timebar').style.width = '0%';
+        return;
+      }
+
+      // Sunucu zamanına göre kalan süreyi hesapla
+      const elapsed = Date.now() - roundStartTime;
+      const remainingMs = Math.max(0, (roundDuration * 1000) - elapsed);
+      const remainingSec = Math.floor(remainingMs / 1000);
+      
+      const min = Math.floor(remainingSec / 60).toString().padStart(2, '0');
+      const sec = (remainingSec % 60).toString().padStart(2, '0');
+      document.getElementById('countdown').textContent = `${min}:${sec}`;
+
+      const bar = document.getElementById('timebar');
+      if (bar) {
+        const percentage = Math.max(0, remainingSec / roundDuration);
+        bar.style.width = (percentage * 100) + '%';
+      }
+      
+      // Süre bittiyse timer'ı durdur
+      if (remainingMs <= 0) {
+        clearInterval(timerInterval);
+      }
     }
 
     // Canlı önizleme
@@ -334,7 +367,7 @@
     document.getElementById('guessBtn').onclick = () => {
       const guess = document.getElementById('guessInput').value.trim();
       if (!guess) return;
-      socket.emit('guess', { room, guess }); // rol kontrolü sunucuda
+      socket.emit('guess', { room, guess });
       document.getElementById('guessInput').value = '';
     };
     document.getElementById('guessInput').addEventListener('keypress', e => {
@@ -388,6 +421,12 @@
       if (word) {
         document.getElementById('gameStatus').textContent = `Tur bitti. Kelime: ${word}`;
       }
+      
+      // Round bittiğinde süre bilgilerini temizle
+      clearInterval(timerInterval);
+      roundStartTime = null;
+      document.getElementById('countdown').textContent = '--:--';
+      document.getElementById('timebar').style.width = '0%';
     });
 
     socket.on('newGame', data => {
@@ -403,27 +442,24 @@
       graphs = [];
       engine.render(graphs);
 
+      // Sunucu zaman bilgilerini al
+      if (data.roundStartTime && data.roundDuration) {
+        roundStartTime = data.roundStartTime;
+        roundDuration = data.roundDuration;
+      } else {
+        // Geriye uyumluluk için varsayılanlar
+        roundStartTime = Date.now();
+        roundDuration = 180;
+      }
+
+      // Timer'ı başlat - client kendi hesaplasını yapar
       clearInterval(timerInterval);
-      remainingTime = 180;
-      updateCountdown(); // hemen başlat
+      updateCountdown(); // hemen güncelle
+      
       timerInterval = setInterval(() => {
-        remainingTime--;
         updateCountdown();
-        if (remainingTime <= 0) clearInterval(timerInterval);
       }, 1000);
     });
-
-    function updateCountdown() {
-      const min = Math.floor(remainingTime / 60).toString().padStart(2, '0');
-      const sec = (remainingTime % 60).toString().padStart(2, '0');
-      document.getElementById('countdown').textContent = `${min}:${sec}`;
-
-      const bar = document.getElementById('timebar');
-      if (bar) {
-        const p = Math.max(0, remainingTime/180);
-        bar.style.width = (p*100)+'%';
-      }
-    }
 
     socket.on('wordForPainter', word => {
       currentWord = word;
@@ -435,6 +471,11 @@
       renderScores(scores);
       document.getElementById('gameStatus').textContent = 'Oyun bitti!';
       alert('Oyun bitti! Tüm oyuncular çizdi.');
+      
+      // Oyun bittiğinde timer'ı temizle
+      clearInterval(timerInterval);
+      roundStartTime = null;
+      updateCountdown();
     });
 
     socket.on('guessResult', res => {
