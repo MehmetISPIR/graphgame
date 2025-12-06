@@ -8,6 +8,47 @@ const { Server } = require("socket.io");
 const io = new Server(server);
 const path = require("path");
 
+// ---- TRAFİK DEDEKTİFİ BAŞLANGIÇ ----
+
+// Bot/İnsan ayrımı yapan buluşsal fonksiyon
+function getVisitorType(userAgent) {
+    if (userAgent.includes("Googlebot") || userAgent.includes("bingbot") || userAgent.includes("crawler")) {
+      return " BOT";
+    }
+    // Mozilla/5.0 içeren, ama "compatible" içermeyen (eski bot taklitlerini filtreler)
+    if (userAgent.includes("Mozilla") && !userAgent.includes("compatible")) {
+      return " İNSAN (Muhtemelen)";
+    }
+    return " BİLİNMEYEN";
+}
+
+// 1. Aşama: HTTP İstek Logu (Sunucuyu Kim Uyandırdı?)
+app.use((req, res, next) => {
+    // Sadece ana sayfa isteklerini logla
+    if (req.path === '/' || req.path === '/index.html' || req.path === '/puzzle.html' || req.path === '/game.html') {
+        const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+        const userAgent = req.get('User-Agent');
+        const visitorType = getVisitorType(userAgent);
+        const time = new Date().toLocaleTimeString('tr-TR');
+        
+        console.log(`\n--- [${time}] YENİ ZİYARETÇİ ---`);
+        console.log(` Tip: ${visitorType}`);
+        console.log(` IP: ${ip}`);
+        console.log(` Hedef: ${req.path}`);
+        console.log(` Agent: ${userAgent.substring(0, 80)}...`); // User Agent'ı kes
+    }
+    next();
+});
+
+// 2. Aşama: Socket.io Bağlantısı (Oyun Gerçekten Başladı mı?)
+io.on("connection", (socket) => {
+    // Bu log, sadece Socket.io bağlantısı kurulduğunda, yani oyun gerçekten başladığında görünür.
+    // Bu, ticari potansiyelin en güçlü kanıtıdır.
+    console.log(` OYUNCU BAĞLANDI! Socket ID: ${socket.id} (Bu kesinlikle bir insan)`);
+
+    // ... kodun geri kalanı ...
+});
+
 // 📽 Public klasör
 app.use(express.static(path.join(__dirname, "public")));
 
