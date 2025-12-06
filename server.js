@@ -8,34 +8,33 @@ const { Server } = require("socket.io");
 const io = new Server(server);
 const path = require("path");
 
-// ---- TRAFİK DEDEKTİFİ BAŞLANGIÇ ----
+// ---- TRAFİK DEDEKTİFİ V2 (HAYALET AVCISI) ----
 
-// Bot/İnsan ayrımı yapan buluşsal fonksiyon
 function getVisitorType(userAgent) {
+    if (!userAgent) return "❓ BOT (User-Agent Yok)"; // Agent yoksa kesin bottur
     if (userAgent.includes("Googlebot") || userAgent.includes("bingbot") || userAgent.includes("crawler")) {
-      return " BOT";
+      return "🤖 ARAMA MOTORU";
     }
-    // Mozilla/5.0 içeren, ama "compatible" içermeyen (eski bot taklitlerini filtreler)
     if (userAgent.includes("Mozilla") && !userAgent.includes("compatible")) {
-      return " İNSAN (Muhtemelen)";
+      return "👤 İNSAN (Muhtemelen)";
     }
-    return " BİLİNMEYEN";
+    return "👾 SCANNER/BOT"; // Ne olduğu belirsiz tarayıcılar
 }
 
-// 1. Aşama: HTTP İstek Logu (Sunucuyu Kim Uyandırdı?)
 app.use((req, res, next) => {
-    // Sadece ana sayfa isteklerini logla
-    if (req.path === '/' || req.path === '/index.html' || req.path === '/puzzle.html' || req.path === '/game.html') {
-        const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-        const userAgent = req.get('User-Agent');
-        const visitorType = getVisitorType(userAgent);
-        const time = new Date().toLocaleTimeString('tr-TR');
+    // ARTIK FİLTRE YOK! Her isteği yakalıyoruz.
+    // Ancak statik dosyaları (resim, css) logu kirletmemesi için hariç tutabiliriz.
+    if ( !req.path.includes('.css') && !req.path.includes('.js') && !req.path.includes('.png') && !req.path.includes('.ico')) {
         
-        console.log(`\n--- [${time}] YENİ ZİYARETÇİ ---`);
-        console.log(` Tip: ${visitorType}`);
-        console.log(` IP: ${ip}`);
-        console.log(` Hedef: ${req.path}`);
-        console.log(` Agent: ${userAgent.substring(0, 80)}...`); // User Agent'ı kes
+        const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+        const userAgent = req.get('User-Agent') || "";
+        const visitorType = getVisitorType(userAgent);
+        const time = new Date().toLocaleTimeString('tr-TR', { timeZone: 'Europe/Istanbul' });
+        
+        console.log(`\n--- [${time}] UYANDIRMA SERVİSİ ---`);
+        console.log(`📡 İstek Yolu: ${req.path}`); // Nereye girmeye çalışıyor?
+        console.log(`🕵️ Tip: ${visitorType}`);
+        console.log(`📱 Agent: ${userAgent.substring(0, 50)}...`);
     }
     next();
 });
