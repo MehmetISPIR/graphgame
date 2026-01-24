@@ -233,14 +233,30 @@ export class GraphEngine {
         const y = (this.canvas.height / 2 - py) / this.scaleY;
         
         let v;
-        try { 
-          v = g.compiled.evaluate({ x, y }); 
-          if (!isFinite(v)) continue;
-        } catch { continue; }
-        
-        if (Math.abs(v) < tol) {
-          pts.push([x, y]);
-        }
+        try {
+                // Önce sonucu ham olarak al (v değişkenine atamadan önce)
+                let result = g.compiled.evaluate({ x, y });
+
+                // 1. DURUM: EĞER SONUÇ EŞİTSİZLİKSE (True/False döner)
+                // Örn: x^2 < y^2
+                if (typeof result === 'boolean') {
+                    if (result === true) {
+                        pts.push([x, y]); // Doğruysa çiz
+                    }
+                    continue; // Sayısal hesaplamaya girmeden sonraki piksele geç
+                }
+
+                // 2. DURUM: EĞER SONUÇ SAYISALSA (Eşitlik)
+                // Örn: x^2 + y
+                v = result; 
+                if (!isFinite(v)) continue;
+
+            } catch (e) { continue; }
+
+            // Sayısal tolerans kontrolü (Sadece 2. durum için çalışır)
+            if (Math.abs(v) < tol) {
+                pts.push([x, y]);
+            }
       }
     }
     
