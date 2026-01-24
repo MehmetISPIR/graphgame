@@ -24,19 +24,26 @@ export class GraphEngine {
   static detectGraphType(exprStr) {
     exprStr = exprStr.replace(/\s+/g, "");
 
-    // Gelişmiş eşitsizlik tespiti
+    // 1. Eşitsizlik varsa -> IMPLICIT
     const inequalityPattern = /[<>]=?|≤|≥|and|or|\&\&|\|\||∧|∨/;
     if (inequalityPattern.test(exprStr)) return "implicit";
 
-    // Parametrik fonksiyon tespiti (gelecek için)
+    // 2. Parametrik (Gelecek için)
     if (exprStr.includes("t") && (exprStr.includes("x(t)") || exprStr.includes("y(t)"))) {
       return "parametric";
     }
 
-    // Mevcut tespit mantığı
+    // --- KRİTİK DÜZELTME BURADA ---
+    // Eğer ifade "y=" ile başlıyorsa -> EXPLICIT
     if (exprStr.startsWith("y=")) return "explicit";
+
+    // Eğer içinde "=" varsa (ve y= ile başlamıyorsa) -> IMPLICIT (Örn: x=0, x=y)
+    if (exprStr.includes("=")) return "implicit";
+    // -----------------------------
+
+    // Standart kontroller
     if (exprStr.includes("y") && exprStr.includes("x")) return "implicit";
-    if (exprStr.includes("x")) return "explicit";
+    if (exprStr.includes("x")) return "explicit"; // Sadece x varsa (örn: "sin(x)")
 
     return "implicit";
   }
