@@ -308,37 +308,31 @@ export class GraphEngine {
   }
 
   /* ============ Gelişmiş grafik derleme ============ */
-  static compileGraph({ type, expr, color, xmin = -10, xmax = 10, lineWidth = 2.5, pointSize = 2 }) {
-    try {
-      const cleanExpr = type === 'explicit' ? expr.replace(/^y\s*=\s*/, '') : expr;
-      const compiled = math.compile(cleanExpr);
-      
-      return {
-        type,
-        expr,
-        color: color || '#b00',
-        xmin, 
-        xmax,
-        lineWidth,
-        pointSize,
-        dx: 0, 
-        dy: 0, 
-        theta: 0,
-        compiled,
-        path: undefined,
-        isValid: true
-      };
-    } catch (error) {
-      console.warn('Graf derleme hatası:', error);
-      return {
-        type,
-        expr,
-        color: color || '#b00',
-        xmin, xmax,
-        isValid: false,
-        error: error.message
-      };
+static detectGraphType(exprStr) {
+    exprStr = exprStr.replace(/\s+/g, "");
+
+    // 1. Eşitsizlik varsa -> IMPLICIT
+    const inequalityPattern = /[<>]=?|≤|≥|and|or|\&\&|\|\||∧|∨/;
+    if (inequalityPattern.test(exprStr)) return "implicit";
+
+    // 2. Parametrik (Gelecek için)
+    if (exprStr.includes("t") && (exprStr.includes("x(t)") || exprStr.includes("y(t)"))) {
+      return "parametric";
     }
+
+    // --- KRİTİK DÜZELTME BURADA ---
+    // Eğer ifade "y=" ile başlıyorsa -> EXPLICIT
+    if (exprStr.startsWith("y=")) return "explicit";
+
+    // Eğer içinde "=" varsa (ve y= ile başlamıyorsa) -> IMPLICIT (Örn: x=0, x=y)
+    if (exprStr.includes("=")) return "implicit";
+    // -----------------------------
+
+    // Standart kontroller
+    if (exprStr.includes("y") && exprStr.includes("x")) return "implicit";
+    if (exprStr.includes("x")) return "explicit"; // Sadece x varsa (örn: "sin(x)")
+
+    return "implicit";
   }
 
   // Yardımcı: Canvas'ı resim olarak export et
