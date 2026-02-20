@@ -109,6 +109,35 @@
 
   /* Painter kelime kutusu */
   #wordToShow{ background:#fff7e0; border:1px dashed #d4b06d; color:#3a2c18; padding:8px 10px; border-radius:8px; display:inline-block; margin-top:8px; }
+    /* ===== Responsive: mobilde tek kolon ===== */
+@media (max-width: 960px){
+  .frame{
+    margin: 0;
+    border-radius: 0;
+    padding: 12px;
+  }
+  .frame::before{ inset: 6px; }
+
+  .game-container{
+    grid-template-columns: 1fr;
+  }
+
+  .canvas-area{
+    padding: 8px;
+  }
+
+  /* Kontroller dar ekranda taşmasın */
+  .field input[type="text"], .field input[type="number"]{
+    min-width: 90px;
+  }
+}
+
+/* Canvas: oranı sabitle, blok gibi davransın */
+#canvas{
+  display: block;
+  aspect-ratio: 4 / 3; /* 800x600 oranı */
+  touch-action: manipulation;
+}
   </style>
 </head>
 <body>
