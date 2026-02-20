@@ -232,6 +232,41 @@
     const socket = io();
     const canvas = document.getElementById('canvas');
     const engine = new GraphEngine(canvas);
+    // ===== Responsive canvas resize (DPR dahil) =====
+function resizeCanvasToContainer() {
+  const area = canvas.parentElement; // .canvas-area
+  if (!area) return;
+
+  // Görünen boyut (CSS px)
+  const rect = canvas.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0) return;
+
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
+
+  // Canvas'ın gerçek piksel boyutu
+  const targetW = Math.round(rect.width * dpr);
+  const targetH = Math.round(rect.height * dpr);
+
+  // Değişmediyse boşuna render yapma
+  if (canvas.width === targetW && canvas.height === targetH) return;
+
+  canvas.width = targetW;
+  canvas.height = targetH;
+
+  // Grid cache boyuta bağlı, sıfırla
+  engine.gridCache = null;
+
+  // Mevcut çizimleri yeniden bas
+  engine.render(graphs);
+}
+
+// İlk yüklemede + ekran değişimlerinde
+window.addEventListener('load', resizeCanvasToContainer, { passive: true });
+window.addEventListener('resize', resizeCanvasToContainer, { passive: true });
+window.addEventListener('orientationchange', () => {
+  // orientationchange bazen önce tetiklenip ölçüler gecikiyor
+  setTimeout(resizeCanvasToContainer, 50);
+});
     let graphs = [];
     let currentRole = 'viewer';
     let currentWord = '';
