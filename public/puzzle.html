@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Mathematical Art Puzzle</title>
 
+<!-- mathjs: ifadeleri derlemek için (engine.js kendi içinde mathjs'i ESM olarak import ediyor,
+     ama puzzle.html'in de graph objesini hazırlarken mathjs'e ihtiyacı var) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.11.0/math.min.js"></script>
+
 <!-- Font (isteğe bağlı) -->
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&display=swap" rel="stylesheet">
@@ -127,223 +131,374 @@
   </div>
 </main>
 
-<!-- engine.js ESM: GraphEngine'i içe aktar ve inline API'yi adapte et -->
+<!--
+  ÖNEMLİ NOTLAR (yarın sabah sen okuyasın diye):
+
+  1) Bu dosya engine.js'i ESM olarak import ediyor. Yani puzzle.html'i direkt
+     dosyadan (file://) değil, bir web sunucu üzerinden açman lazım. descx.art'ı
+     nasıl çalıştırıyorsan (node server.js) aynı şekilde. Aksi halde tarayıcı
+     "CORS" veya "module not allowed" hatası verir.
+
+  2) Değişen ana şey şu: Önceki versiyonda puzzle.html, var olmayan bir
+     GraphEngine.compileGraph() metoduna çağrı yapıyordu. Ben onun yerine
+     burada kendi buildGraph() fonksiyonumu yazdım — mathjs ile ifadeyi
+     derleyip, engine.js'in render() metodunun beklediği graph objesini
+     hazırlıyor (type, expr, compiled, color, xmin, xmax, dx, dy, theta, path).
+
+  3) Eşitsizlikleri (x^2 + y^2 < 9 gibi) implicit olarak çizmek için
+     engine.js'in implicit renderer'ı eval sonucu boolean çıkarsa nokta
+     koyuyor. Yani "<" "<=" ">" ">=" destekleniyor. Sınır çizgisine dönüştürme
+     yapmıyoruz, direkt bölge doldurması yapıyor (engine.js'in drawImplicit'i).
+
+  4) Eğer yarın bir şeyi değiştirmek istersen bakman gereken yerler:
+     - buildGraph()   → graph objesi nasıl hazırlanıyor
+     - renderExpr()   → engine.js'e nasıl çağrı yapılıyor
+     - state.shapes   → hedef şekillerin listesi, yeni şekil eklemek için
+-->
+
 <script type="module">
   import { GraphEngine } from './engine.js';
 
-  // Eşitsizliği kontur çizimi için "sol - sağ = 0" formuna çevir
-  function toImplicitBoundary(expr){
-    const m = expr && expr.match(/^(.*?)(<=|>=|<|>)(.*)$/);
-    return m ? `(${m[1].trim()}) - (${m[3].trim()})` : expr;
+  // ---------- ENGINE'E GRAPH NESNESİ HAZIRLAMA ----------
+  // engine.js'in render() metodu şu alanları olan bir graph objesi bekliyor:
+  //   { type, expr, compiled, color, xmin, xmax, dx, dy, theta, path }
+  // compiled = mathjs ile derlenmiş ifade. path = implicit için cache (ilk
+  // render'da engine kendi dolduruyor, biz undefined bırakıyoruz).
+  function buildGraph(exprStr, color = '#7b5e7b') {
+    if (!exprStr || !exprStr.trim()) return null;
+
+    // engine.js'in statik detectGraphType'ı var, onu kullan
+    const type = GraphEngine.detectGraphType(exprStr);
+
+    // explicit ise "y=" kısmını at, implicit ise olduğu gibi derle
+    let toCompile = exprStr.replace(/\s+/g, '');
+    if (type === 'explicit' && toCompile.startsWith('y=')) {
+      toCompile = toCompile.slice(2);
+    }
+
+    let compiled;
+    try {
+      compiled = math.compile(toCompile);
+    } catch (e) {
+      console.warn('Derleme hatası:', exprStr, e.message);
+      return null;
+    }
+
+    return {
+      type,
+      expr: exprStr,
+      compiled,
+      color,
+      xmin: -10,
+      xmax: 10,
+      dx: 0,
+      dy: 0,
+      theta: 0,
+      path: undefined,
+      pointSize: 2,
+      lineWidth: 2.5,
+    };
   }
 
-  // Inline sürümdeki "render(expr)" davranışını taklit eden ufak adaptör
-  function renderExpr(engine, expr, color){
-    engine.clear(); engine.drawGrid(); engine.drawAxes();
-    if (!expr) return;
-    const e = toImplicitBoundary(expr);
-    const g = GraphEngine.compileGraph({
-      type:'implicit', expr:e, xmin:-10, xmax:10, pointSize:2, color
-    });
-    if (g.isValid) engine.render([g]);
+  // Verilen ifadeyi verilen engine üzerinde çiz (yoksa sadece boş grid+eksen)
+  function renderExpr(engine, exprStr, color) {
+    // engine.js'in render() fonksiyonu zaten clear+grid+axes yapıyor
+    const g = buildGraph(exprStr, color);
+    if (!g) {
+      engine.render([]); // boş dizi = sadece grid + eksen
+      return;
+    }
+    engine.render([g]);
   }
 
-  // ---- Oyun durumu ve UI ----
+  // ---------- CANVAS KURULUMU ----------
   const cvT = document.getElementById('cvTarget');
   const cvU = document.getElementById('cvUser');
+  // Canvas'ın gerçek piksel boyutunu sabit tutuyoruz (CSS ile ayrıca stretched)
   cvT.width = cvU.width = 600;
   cvT.height = cvU.height = 360;
 
-  const engT = new GraphEngine(cvT,35);
-  const engU = new GraphEngine(cvU,35);
+  const engT = new GraphEngine(cvT, 35);
+  const engU = new GraphEngine(cvU, 35);
 
-  const el = (id)=>document.getElementById(id);
+  // ---------- OYUN DURUMU ----------
+  const el = (id) => document.getElementById(id);
   const state = {
-    level:1, total:0, hint:3, current:null, blocks:[], constructed:"",
-    shapes:[
-      {name:"Daire",  f:"x^2 + y^2 < 9",                  diff:1, hint:"Daire: x² + y² ..."},
-      {name:"Elips",  f:"x^2/9 + y^2/4 < 1",              diff:2, hint:"Elips: x²/a² + y²/b² ..."},
-      {name:"Kare",   f:"abs(x) + abs(y) < 3",            diff:2, hint:"Mutlak değer köşeler yapar"},
-      {name:"Dalga",  f:"y < sin(x*2) + 2",               diff:3, hint:"sin(...) dalga üretir"},
-      {name:"Hiper",  f:"x*y < 4",                        diff:2, hint:"x·y çarpımı hiperbolik bölgeler"},
-      {name:"Kalp",   f:"(x^2 + y^2 - 4)^3 < x^2 * y^3",  diff:4, hint:"Kalp: parantez ve üsler"},
-      {name:"Parabol",f:"y < x^2/3",                      diff:2, hint:"Parabol: x² terimi"},
-      {name:"Hiper-2",f:"x^2 - y^2 < 4",                  diff:2, hint:"x² - y² farkı"},
-      {name:"Kare-2", f:"max(abs(x),abs(y)) < 3",         diff:3, hint:"max(abs(x),abs(y)) kare sınır"},
-      {name:"Desen",  f:"sin(x) * cos(y) < 0.5",          diff:3, hint:"trig fonksiyonlar desen verir"},
-    ]
+    level: 1,
+    total: 0,
+    hint: 3,
+    current: null,
+    blocks: [],
+    constructed: '',
+    shapes: [
+      { name: 'Daire',   f: 'x^2 + y^2 < 9',                 diff: 1, hint: 'Daire: x² + y² ...' },
+      { name: 'Elips',   f: 'x^2/9 + y^2/4 < 1',             diff: 2, hint: 'Elips: x²/a² + y²/b² ...' },
+      { name: 'Kare',    f: 'abs(x) + abs(y) < 3',           diff: 2, hint: 'Mutlak değer köşeler yapar' },
+      { name: 'Dalga',   f: 'y < sin(x*2) + 2',              diff: 3, hint: 'sin(...) dalga üretir' },
+      { name: 'Hiper',   f: 'x*y < 4',                       diff: 2, hint: 'x·y çarpımı hiperbolik bölgeler' },
+      { name: 'Parabol', f: 'y < x^2/3',                     diff: 2, hint: 'Parabol: x² terimi' },
+      { name: 'Hiper-2', f: 'x^2 - y^2 < 4',                 diff: 2, hint: 'x² - y² farkı' },
+      { name: 'Desen',   f: 'sin(x) * cos(y) < 0.5',         diff: 3, hint: 'trig fonksiyonlar desen verir' },
+    ],
   };
 
-  function randShape(){ return state.shapes[Math.floor(Math.random()*state.shapes.length)]; }
+  function randShape() {
+    return state.shapes[Math.floor(Math.random() * state.shapes.length)];
+  }
 
-  function tokenize(formula){
-    const toks=[]; let cur=""; const ops="+-*/^<>=()";
-    for(const ch of formula){
-      if (ch===" ") { if(cur){toks.push(cur);cur=""} continue }
-      if (ops.includes(ch)) { if(cur){toks.push(cur);cur=""} toks.push(ch) }
-      else cur += ch;
+  // ---------- TOKENIZER (formülü parçalara böler) ----------
+  function tokenize(formula) {
+    const toks = [];
+    let cur = '';
+    const ops = '+-*/^<>=()';
+    for (const ch of formula) {
+      if (ch === ' ') {
+        if (cur) { toks.push(cur); cur = ''; }
+        continue;
+      }
+      if (ops.includes(ch)) {
+        if (cur) { toks.push(cur); cur = ''; }
+        toks.push(ch);
+      } else {
+        cur += ch;
+      }
     }
-    if(cur) toks.push(cur);
-    // x ^ 2 birleştir (x^2)
-    const merged=[];
-    for (let i=0;i<toks.length;i++){
-      if (toks[i]==="^" && i>0 && i<toks.length-1){
+    if (cur) toks.push(cur);
+
+    // x ^ 2 gibi dağınıkları birleştir → "x^2"
+    const merged = [];
+    for (let i = 0; i < toks.length; i++) {
+      if (toks[i] === '^' && i > 0 && i < toks.length - 1) {
         const base = merged.pop();
-        merged.push(base+"^"+toks[i+1]); i++;
-      } else merged.push(toks[i]);
+        merged.push(base + '^' + toks[i + 1]);
+        i++;
+      } else {
+        merged.push(toks[i]);
+      }
     }
     return merged;
   }
 
-  function blockType(t){
-    if ("+-*/^".includes(t)) return "operator";
-    if ("<=>".includes(t))  return "comparison";
-    if (t==="(" || t===")") return "bracket";
-    if (!isNaN(t))          return "number";
-    if (/sin|cos|abs|max|min|sqrt|atan2/.test(t)) return "function";
-    return "term";
+  function blockType(t) {
+    if ('+-*/^'.includes(t)) return 'operator';
+    if ('<=>'.includes(t))   return 'comparison';
+    if (t === '(' || t === ')') return 'bracket';
+    if (!isNaN(t))           return 'number';
+    if (/sin|cos|abs|max|min|sqrt|atan2/.test(t)) return 'function';
+    return 'term';
   }
 
-  function makeBlocks(formula, diff){
+  function makeBlocks(formula, diff) {
     const toks = tokenize(formula);
-    const core = toks.map(v => ({type:blockType(v), value:v}));
+    const core = toks.map((v) => ({ type: blockType(v), value: v }));
 
+    // Zorluğa göre birkaç "yanıltıcı" parça ekle
     const extrasPool = [
-      {type:"number", value:String(1+Math.floor(Math.random()*9))},
-      {type:"operator", value:"+"},{type:"operator", value:"-"},
-      {type:"operator", value:"*"},{type:"operator", value:"/"},
-      {type:"term", value:"x"},{type:"term", value:"y"},
-      {type:"term", value:"x^2"},{type:"term", value:"y^2"},
-      {type:"function", value:"sin("},{type:"function", value:"cos("},
-      {type:"function", value:"abs("},{type:"comparison", value:">"}
-    ].filter(b => !formula.includes(b.value) && !(diff<3 && b.type==="function"));
+      { type: 'number',     value: String(1 + Math.floor(Math.random() * 9)) },
+      { type: 'operator',   value: '+' },
+      { type: 'operator',   value: '-' },
+      { type: 'operator',   value: '*' },
+      { type: 'operator',   value: '/' },
+      { type: 'term',       value: 'x' },
+      { type: 'term',       value: 'y' },
+      { type: 'term',       value: 'x^2' },
+      { type: 'term',       value: 'y^2' },
+      { type: 'function',   value: 'sin(' },
+      { type: 'function',   value: 'cos(' },
+      { type: 'function',   value: 'abs(' },
+      { type: 'comparison', value: '>' },
+    ].filter((b) => !formula.includes(b.value) && !(diff < 3 && b.type === 'function'));
 
-    const count = Math.min(2*diff,5);
-    for(let i=0;i<count && extrasPool.length;i++){
-      const k = Math.floor(Math.random()*extrasPool.length);
-      core.push(extrasPool.splice(k,1)[0]);
+    const count = Math.min(2 * diff, 5);
+    for (let i = 0; i < count && extrasPool.length; i++) {
+      const k = Math.floor(Math.random() * extrasPool.length);
+      core.push(extrasPool.splice(k, 1)[0]);
     }
 
-    for(let i=core.length-1;i>0;i--){
-      const j=Math.floor(Math.random()*(i+1)); [core[i],core[j]]=[core[j],core[i]];
+    // Karıştır
+    for (let i = core.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [core[i], core[j]] = [core[j], core[i]];
     }
     return core;
   }
 
-  function renderPalette(){
-    const pal = el('palette'); pal.innerHTML="";
-    state.blocks.forEach((b,idx)=>{
-      const d=document.createElement('div');
-      d.className=`block ${b.type}`; d.textContent=b.value;
-      d.draggable=true; d.dataset.idx=idx; d.dataset.val=b.value; d.dataset.type=b.type;
-      d.addEventListener('dragstart', ev=>{ ev.dataTransfer.setData('text/plain', JSON.stringify(b)); });
+  // ---------- PALET RENDER ----------
+  function renderPalette() {
+    const pal = el('palette');
+    pal.innerHTML = '';
+    state.blocks.forEach((b, idx) => {
+      const d = document.createElement('div');
+      d.className = `block ${b.type}`;
+      d.textContent = b.value;
+      d.draggable = true;
+      d.dataset.idx = idx;
+      d.dataset.val = b.value;
+      d.dataset.type = b.type;
+      d.addEventListener('dragstart', (ev) => {
+        ev.dataTransfer.setData('text/plain', JSON.stringify(b));
+      });
       pal.appendChild(d);
     });
   }
 
-  function setFormulaFromDrop(){
+  // ---------- DROP ZONE ----------
+  function setFormulaFromDrop() {
     const drop = el('drop');
-    const parts = [...drop.children].map(c=>c.dataset.val);
+    const parts = [...drop.children].map((c) => c.dataset.val);
     state.constructed = parts.join(' ');
     el('formula').textContent = state.constructed;
     drawUser();
   }
 
-  function attachDrop(){
+  function attachDrop() {
     const drop = el('drop');
-    drop.addEventListener('dragover', e=>{ e.preventDefault(); drop.classList.add('drag') });
-    drop.addEventListener('dragleave', ()=> drop.classList.remove('drag'));
-    drop.addEventListener('drop', e=>{
-      e.preventDefault(); drop.classList.remove('drag');
-      let data; try{ data = JSON.parse(e.dataTransfer.getData('text/plain')||'') }catch(_){}
-      if(!data) return;
-      const n=document.createElement('div');
-      n.className=`block ${data.type}`; n.textContent=data.value;
-      n.dataset.val=data.value; n.dataset.type=data.type;
-      n.draggable=true;
-      n.addEventListener('dragstart', ev=>{ ev.dataTransfer.setData('text/plain', JSON.stringify({type:n.dataset.type,value:n.dataset.val})) });
-      n.addEventListener('dblclick', ()=>{ n.remove(); setFormulaFromDrop() });
+    drop.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      drop.classList.add('drag');
+    });
+    drop.addEventListener('dragleave', () => drop.classList.remove('drag'));
+    drop.addEventListener('drop', (e) => {
+      e.preventDefault();
+      drop.classList.remove('drag');
+      let data;
+      try {
+        data = JSON.parse(e.dataTransfer.getData('text/plain') || '');
+      } catch (_) {}
+      if (!data) return;
+
+      const n = document.createElement('div');
+      n.className = `block ${data.type}`;
+      n.textContent = data.value;
+      n.dataset.val = data.value;
+      n.dataset.type = data.type;
+      n.draggable = true;
+      n.addEventListener('dragstart', (ev) => {
+        ev.dataTransfer.setData(
+          'text/plain',
+          JSON.stringify({ type: n.dataset.type, value: n.dataset.val })
+        );
+      });
+      n.addEventListener('dblclick', () => {
+        n.remove();
+        setFormulaFromDrop();
+      });
       drop.appendChild(n);
       setFormulaFromDrop();
     });
   }
 
-  function drawTarget(){
+  // ---------- ÇİZİM ----------
+  function drawTarget() {
     renderExpr(engT, state.current.f, '#7b9b7b');
   }
 
-  function drawUser(){
+  function drawUser() {
     renderExpr(engU, state.constructed, '#7b5e7b');
     updateSimilarity();
   }
 
-  function contentMask(ctx, w, h){
-    const id = ctx.getImageData(0,0,w,h).data;
-    const mask = new Uint8Array((w*h));
-    for(let i=0, p=0; i<id.length; i+=16, p++){
-      const a = id[i+3];
-      const r = id[i], g = id[i+1], b = id[i+2];
-      const isGrid = (r>200 && g>180 && b>150) || (r===139 && g===111 && b===62);
-      mask[p] = (a>100 && !isGrid) ? 1 : 0;
+  // ---------- BENZERLİK ÖLÇÜMÜ ----------
+  // İki canvas'taki "dolu" pikselleri Jaccard benzerliği ile karşılaştır.
+  // Grid ve eksen piksellerini eleyerek sadece grafiğin bıraktığı izi sayıyoruz.
+  function contentMask(ctx, w, h) {
+    const id = ctx.getImageData(0, 0, w, h).data;
+    // 4 piksel adımla örnekleme — hız için
+    const mask = new Uint8Array(w * h);
+    for (let i = 0, p = 0; i < id.length; i += 16, p++) {
+      const r = id[i];
+      const g = id[i + 1];
+      const b = id[i + 2];
+      const a = id[i + 3];
+      // Grid rengi (#e8dcc0 ~ 232,220,192) ve eksen (#8b6f3e ~ 139,111,62) elenir
+      const isGridLight = r > 220 && g > 210 && b > 180;
+      const isGridDark  = r > 200 && g > 180 && b > 150;
+      const isAxis      = r === 139 && g === 111 && b === 62;
+      const isBackground = r > 250 && g > 240 && b > 220;
+      mask[p] = a > 100 && !isGridLight && !isGridDark && !isAxis && !isBackground ? 1 : 0;
     }
     return mask;
   }
 
-  function jaccard(maskA, maskB){
-    let inter=0, union=0;
+  function jaccard(maskA, maskB) {
+    let inter = 0;
+    let union = 0;
     const n = Math.min(maskA.length, maskB.length);
-    for(let i=0;i<n;i++){
-      const a=maskA[i], b=maskB[i];
-      if (a|b) union++;
-      if (a&b) inter++;
+    for (let i = 0; i < n; i++) {
+      const a = maskA[i];
+      const b = maskB[i];
+      if (a | b) union++;
+      if (a & b) inter++;
     }
-    return union ? inter/union : 0;
+    return union ? inter / union : 0;
   }
 
-  function updateSimilarity(){
-    const tctx=cvT.getContext('2d'), uctx=cvU.getContext('2d');
+  function updateSimilarity() {
+    const tctx = cvT.getContext('2d');
+    const uctx = cvU.getContext('2d');
     const mT = contentMask(tctx, cvT.width, cvT.height);
     const mU = contentMask(uctx, cvU.width, cvU.height);
     let s = jaccard(mT, mU) * 100;
-    s = Math.min(100, Math.round(s*2));
+    // ×2 çarpanı: implicit çizim seyrek olduğu için benzerliği büyütüyoruz
+    s = Math.min(100, Math.round(s * 2));
     el('simTxt').textContent = s;
     el('simBar').style.width = s + '%';
-    if (s>85) onSuccess(s);
+    if (s > 85) onSuccess(s);
   }
 
-  function onSuccess(sim){
+  function onSuccess(sim) {
     const score = Math.round(sim * state.current.diff);
     state.total += score;
     el('scoreTxt').textContent = score;
     el('totalTxt').textContent = state.total;
     el('hintTxt').textContent = `Harika! +${score} puan`;
     el('userCard').classList.add('glow');
-    setTimeout(()=>el('userCard').classList.remove('glow'), 900);
+    setTimeout(() => el('userCard').classList.remove('glow'), 900);
   }
 
-  function newLevel(){
+  // ---------- YENİ SEVİYE ----------
+  function newLevel() {
     state.current = randShape();
     state.blocks = makeBlocks(state.current.f, state.current.diff);
-    state.constructed = "";
-    el('drop').innerHTML=""; el('formula').textContent="";
-    renderPalette(); drawTarget(); drawUser();
+    state.constructed = '';
+    el('drop').innerHTML = '';
+    el('formula').textContent = '';
+    renderPalette();
+    drawTarget();
+    drawUser();
     el('levelNum').textContent = state.level;
     el('hintCnt').textContent = state.hint;
-    el('hintTxt').textContent = "";
-    el('scoreTxt').textContent = "0";
+    el('hintTxt').textContent = '';
+    el('scoreTxt').textContent = '0';
   }
 
-  // Kontroller
-  el('btnClear').onclick = ()=>{ el('drop').innerHTML=""; setFormulaFromDrop() };
-  el('btnShuffle').onclick = ()=>{ state.blocks.sort(()=>Math.random()-.5); renderPalette() };
-  el('btnHint').onclick = ()=>{
-    if (state.hint>0){ state.hint--; el('hintCnt').textContent=state.hint; el('hintTxt').textContent=state.current.hint; setTimeout(()=>el('hintTxt').textContent="", 4500) }
-    else { el('hintTxt').textContent='İpucu hakkın bitti!' }
+  // ---------- KONTROL BUTONLARI ----------
+  el('btnClear').onclick = () => {
+    el('drop').innerHTML = '';
+    setFormulaFromDrop();
   };
-  el('btnCheck').onclick = ()=> updateSimilarity();
-  el('btnNew').onclick = ()=>{ state.level++; state.hint=3; newLevel(); };
+  el('btnShuffle').onclick = () => {
+    state.blocks.sort(() => Math.random() - 0.5);
+    renderPalette();
+  };
+  el('btnHint').onclick = () => {
+    if (state.hint > 0) {
+      state.hint--;
+      el('hintCnt').textContent = state.hint;
+      el('hintTxt').textContent = state.current.hint;
+      setTimeout(() => (el('hintTxt').textContent = ''), 4500);
+    } else {
+      el('hintTxt').textContent = 'İpucu hakkın bitti!';
+    }
+  };
+  el('btnCheck').onclick = () => updateSimilarity();
+  el('btnNew').onclick = () => {
+    state.level++;
+    state.hint = 3;
+    newLevel();
+  };
 
-  // başlat
+  // ---------- BAŞLAT ----------
   attachDrop();
   newLevel();
 </script>
