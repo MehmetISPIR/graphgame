@@ -3,504 +3,515 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Mathematical Art Puzzle</title>
-
-<!-- mathjs: ifadeleri derlemek için (engine.js kendi içinde mathjs'i ESM olarak import ediyor,
-     ama puzzle.html'in de graph objesini hazırlarken mathjs'e ihtiyacı var) -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.11.0/math.min.js"></script>
-
-<!-- Font (isteğe bağlı) -->
+<title>Mathematical Art Puzzle — descx.art</title>
+<link rel="icon" href="/favicon.ico" type="image/x-icon">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&display=swap" rel="stylesheet">
 
 <style>
-  :root{
-    --parchment:#f6efe1; --paper:#fffdf6; --ink:#2b1d0e; --muted:#6b5641;
-    --gold:#b38a3e; --border:#d8c7a3; --shadow:0 14px 40px rgba(0,0,0,.18);
-  }
-  *{box-sizing:border-box}
-  body{
-    margin:0;padding:20px;min-height:100vh;color:var(--ink);
-    font-family:"Libre Baskerville", Georgia, serif;
-    background:
-      radial-gradient(1200px 700px at 50% 0%, #f8f1e6 0%, #efe3cd 60%, #e6d5b5 100%),
-      repeating-linear-gradient(10deg, #0000 0 24px, #00000006 24px 25px);
-  }
-  .frame{
-    max-width:1200px;margin:28px auto;padding:20px;background:var(--parchment);
-    border:1px solid var(--gold);border-radius:10px;box-shadow:var(--shadow);position:relative;
-  }
-  .frame::before{content:"";position:absolute;inset:10px;border:3px double var(--gold);border-radius:8px;pointer-events:none}
-  .game{background:var(--paper);border:1px solid var(--border);border-radius:12px;padding:20px;box-shadow:inset 0 0 0 1px #ffffff80}
-  .header{text-align:center;border-bottom:1px solid var(--border);padding-bottom:12px;margin-bottom:16px}
-  .header h1{margin:0 0 10px;font-variant:small-caps;letter-spacing:.02em}
-  .stats{display:flex;gap:12px;justify-content:center;color:var(--muted);font-weight:600}
-  .stats strong{color:var(--ink);margin-left:4px}
+:root{
+  --parchment:#f6efe1;--paper:#fffdf6;--ink:#2b1d0e;--muted:#6b5641;
+  --gold:#b38a3e;--border:#d8c7a3;--shadow:0 14px 40px rgba(0,0,0,.18);
+}
+*{box-sizing:border-box}
+body{
+  margin:0;padding:20px;min-height:100vh;color:var(--ink);
+  font-family:"Libre Baskerville",Georgia,serif;
+  background:
+    radial-gradient(1200px 700px at 50% 0%,#f8f1e6 0%,#efe3cd 60%,#e6d5b5 100%),
+    repeating-linear-gradient(10deg,#0000 0 24px,#00000006 24px 25px);
+}
+.frame{
+  max-width:1200px;margin:28px auto;padding:20px;background:var(--parchment);
+  border:1px solid var(--gold);border-radius:10px;box-shadow:var(--shadow);position:relative;
+}
+.frame::before{content:"";position:absolute;inset:10px;border:3px double var(--gold);border-radius:8px;pointer-events:none}
+.game{background:var(--paper);border:1px solid var(--border);border-radius:12px;padding:20px;box-shadow:inset 0 0 0 1px #ffffff80}
 
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:16px 0}
-  .card{position:relative;background:#fffdf9;border:1px solid var(--border);border-radius:12px;padding:12px}
-  .label{position:absolute;top:-12px;left:16px;background:var(--paper);border:1px solid var(--border);border-radius:12px;padding:4px 10px;font-size:12px;color:var(--muted);font-weight:700}
-  canvas{display:block;width:100%;height:360px;background:#fffaf0;border:1px solid #d8c7a3;border-radius:10px}
-  .similarity{height:8px;background:#f1e6cb;border:1px solid var(--border);border-radius:6px;margin-top:8px;overflow:hidden}
-  .fill{height:100%;width:0%;background:linear-gradient(90deg,#d6b86a,#b38a3e);transition:width .3s}
+.header{text-align:center;border-bottom:1px solid var(--border);padding-bottom:12px;margin-bottom:16px}
+.header h1{margin:0 0 10px;font-variant:small-caps;letter-spacing:.02em;font-size:24px}
+.stats{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;color:var(--muted);font-weight:600;font-size:14px}
+.stats strong{color:var(--ink);margin-left:4px}
 
-  .section{background:var(--paper);border:1px solid var(--border);border-radius:12px;padding:14px;margin:12px 0;box-shadow:inset 0 0 0 1px #ffffff80}
-  .blocks{display:flex;flex-wrap:wrap;gap:10px;padding:12px;background:#f9f5ed;border:1px dashed var(--border);border-radius:10px;min-height:68px}
-  .drop{display:flex;flex-wrap:wrap;gap:8px;align-items:center;min-height:68px;padding:12px;border:2px dashed var(--border);border-radius:10px;background:#fffdf9}
-  .drop.drag{background:#f4ead5;border-color:var(--gold)}
-  .block{
-    padding:8px 12px;border-radius:8px;font:700 14px/1 'Courier New', monospace;cursor:move;user-select:none;
-    border:1px solid #00000014;box-shadow:0 2px 4px #0000001f;transition:transform .15s
-  }
-  .block:hover{transform:translateY(-1px)}
-  .block.term{background:linear-gradient(135deg,#7b9b7b,#5e7b5e);color:#fff}
-  .block.operator{background:linear-gradient(135deg,#d4a574,#b8935f);color:var(--ink)}
-  .block.number{background:linear-gradient(135deg,#9b7b9b,#7b5e7b);color:#fff}
-  .block.comparison{background:linear-gradient(135deg,#7b9b9b,#5e7b7b);color:#fff}
-  .block.function{background:linear-gradient(135deg,#9b7b7b,#7b5e5e);color:#fff}
-  .block.bracket{background:linear-gradient(135deg,#8b8b7b,#6b6b5e);color:#fff}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:16px 0}
+@media(max-width:768px){.grid{grid-template-columns:1fr}}
+.card{position:relative;background:#fffdf9;border:1px solid var(--border);border-radius:12px;padding:12px}
+.label{position:absolute;top:-12px;left:16px;background:var(--paper);border:1px solid var(--border);border-radius:12px;padding:4px 10px;font-size:12px;color:var(--muted);font-weight:700}
+canvas{display:block;width:100%;height:360px;background:#fffaf0;border:1px solid #d8c7a3;border-radius:10px}
 
-  .controls{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:8px}
-  button{
-    padding:10px 14px;border:1px solid #8a6a2a;border-radius:10px;cursor:pointer;
-    background:linear-gradient(#e9d6a6,#d6b86a);color:#3a2a0d;font-weight:700
-  }
-  button.secondary{background:linear-gradient(#efe3cd,#e0d0b0)}
-  .row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-  .box{background:var(--paper);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center}
-  .big{font-size:22px;font-weight:800;color:var(--gold)}
-  .formula{font:14px 'Courier New', monospace;color:var(--muted);margin-top:8px;min-height:20px}
-  @keyframes goldPulse{0%{box-shadow:0 0 0 0 rgba(179,138,62,.7)}50%{box-shadow:0 0 20px 10px rgba(179,138,62,0)}100%{box-shadow:0 0 0 0 rgba(179,138,62,0)}}
-  .glow{animation:goldPulse 1s}
+.similarity{height:10px;background:#f1e6cb;border:1px solid var(--border);border-radius:6px;margin-top:8px;overflow:hidden}
+.sim-fill{height:100%;width:0%;border-radius:6px;transition:width .4s ease,background .4s ease}
+
+.section{background:var(--paper);border:1px solid var(--border);border-radius:12px;padding:14px;margin:12px 0;box-shadow:inset 0 0 0 1px #ffffff80}
+
+.blocks{display:flex;flex-wrap:wrap;gap:8px;padding:12px;background:#f9f5ed;border:1px dashed var(--border);border-radius:10px;min-height:52px;cursor:pointer}
+.blocks:empty::after{content:"Tum parcalar kullanildi";color:var(--muted);font-style:italic;font-size:13px}
+
+.drop{display:flex;flex-wrap:wrap;gap:8px;align-items:center;min-height:52px;padding:12px;border:2px dashed var(--border);border-radius:10px;background:#fffdf9;cursor:pointer}
+.drop:empty::after{content:"Parcalara tiklayarak formul olustur";color:var(--muted);font-style:italic;font-size:13px}
+
+.block{
+  padding:8px 12px;border-radius:8px;font:700 14px/1 'Courier New',monospace;
+  cursor:pointer;user-select:none;border:1px solid #00000014;
+  box-shadow:0 2px 4px #0000001f;transition:transform .12s,opacity .12s;
+}
+.block:hover{transform:translateY(-2px)}
+.block:active{transform:scale(.95)}
+.block.term{background:linear-gradient(135deg,#7b9b7b,#5e7b5e);color:#fff}
+.block.operator{background:linear-gradient(135deg,#d4a574,#b8935f);color:var(--ink)}
+.block.number{background:linear-gradient(135deg,#9b7b9b,#7b5e7b);color:#fff}
+.block.comparison{background:linear-gradient(135deg,#7b9b9b,#5e7b7b);color:#fff}
+.block.function{background:linear-gradient(135deg,#9b7b7b,#7b5e5e);color:#fff}
+.block.bracket{background:linear-gradient(135deg,#8b8b7b,#6b6b5e);color:#fff}
+
+.formula-display{
+  margin-top:8px;padding:8px 12px;min-height:28px;
+  font:14px 'Courier New',monospace;color:var(--muted);
+  background:#f9f5ed;border:1px solid var(--border);border-radius:8px;
+  transition:border-color .2s;
+}
+.formula-display.error{border-color:#c44;color:#a33}
+.formula-display.valid{border-color:#6a6;color:#463}
+.formula-display.needs-ineq{border-color:#c90;color:#964}
+
+.controls{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:12px}
+button{
+  padding:10px 16px;border:1px solid #8a6a2a;border-radius:10px;cursor:pointer;
+  background:linear-gradient(#e9d6a6,#d6b86a);color:#3a2a0d;font-weight:700;
+  font-size:14px;transition:filter .1s;
+}
+button:hover{filter:brightness(1.04)}
+button:active{filter:brightness(.96)}
+button.secondary{background:linear-gradient(#efe3cd,#e0d0b0)}
+
+.row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:12px}
+.box{background:var(--paper);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center}
+.big{font-size:24px;font-weight:800;color:var(--gold)}
+.hint-text{min-height:24px;color:var(--muted);font-style:italic;font-size:13px;margin-top:4px}
+
+.toast{
+  position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);
+  padding:12px 24px;border-radius:10px;font-weight:700;font-size:14px;
+  opacity:0;transition:all .3s ease;z-index:100;pointer-events:none;
+  box-shadow:0 4px 16px rgba(0,0,0,.2);
+}
+.toast.show{transform:translateX(-50%) translateY(0);opacity:1}
+.toast.success{background:#4a7c4a;color:#fff}
+.toast.error{background:#8c3a3a;color:#fff}
+.toast.info{background:#4a6a8c;color:#fff}
+
+@keyframes goldPulse{0%{box-shadow:0 0 0 0 rgba(179,138,62,.6)}100%{box-shadow:0 0 24px 12px rgba(179,138,62,0)}}
+.glow{animation:goldPulse .8s ease-out}
 </style>
 </head>
 <body>
 <main class="frame">
   <div class="game">
     <div class="header">
-      <h1>⚜️ Mathematical Art Puzzle ⚜️</h1>
+      <h1>Mathematical Art Puzzle</h1>
       <div class="stats">
-        <span>Level <strong id="levelNum">1</strong></span>
+        <span>Seviye <strong id="levelNum">1</strong></span>
         <span>Benzerlik <strong id="simTxt">0</strong>%</span>
-        <span>İpucu <strong id="hintCnt">3</strong></span>
-        <span>Puan <strong id="totalTxt">0</strong></span>
+        <span>Ipucu <strong id="hintCnt">3</strong></span>
+        <span>Toplam <strong id="totalTxt">0</strong></span>
       </div>
     </div>
 
     <div class="grid">
       <div class="card">
-        <span class="label">🎯 Hedef Şekil</span>
+        <span class="label">Hedef Sekil</span>
         <canvas id="cvTarget"></canvas>
       </div>
       <div class="card" id="userCard">
-        <span class="label">🎨 Senin Çizimin</span>
+        <span class="label">Senin Cizimin</span>
         <canvas id="cvUser"></canvas>
-        <div class="similarity"><div id="simBar" class="fill"></div></div>
+        <div class="similarity"><div id="simBar" class="sim-fill"></div></div>
       </div>
     </div>
 
     <div class="section">
-      <h3>📦 Yapboz Parçaları</h3>
+      <h4>Yapboz Parcalari</h4>
       <div id="palette" class="blocks"></div>
     </div>
 
     <div class="section">
-      <h3>🔧 Formül Oluşturma Alanı</h3>
+      <h4>Formul Olusturma Alani</h4>
       <div id="drop" class="drop"></div>
-      <div id="formula" class="formula"></div>
+      <div id="formulaDisplay" class="formula-display"></div>
     </div>
 
     <div class="controls">
-      <button class="secondary" id="btnClear">🗑️ Temizle</button>
-      <button id="btnHint">💡 İpucu Al</button>
-      <button id="btnShuffle">🔀 Karıştır</button>
-      <button id="btnCheck">✅ Kontrol Et</button>
-      <button id="btnNew">🎲 Yeni Şekil</button>
+      <button class="secondary" id="btnClear">Temizle</button>
+      <button id="btnHint">Ipucu</button>
+      <button class="secondary" id="btnShuffle">Karistir</button>
+      <button id="btnCheck">Kontrol Et</button>
+      <button id="btnNext">Sonraki</button>
     </div>
 
-    <div class="row" style="margin-top:12px">
+    <div class="row">
       <div class="box">
-        <div>Skor</div>
+        <div>Bu Tur</div>
         <div id="scoreTxt" class="big">0</div>
       </div>
       <div class="box">
-        <div>İpucu</div>
-        <div id="hintTxt" style="min-height:24px;color:var(--muted);font-style:italic"></div>
+        <div>Ipucu</div>
+        <div id="hintTxt" class="hint-text"></div>
       </div>
     </div>
   </div>
 </main>
 
-<!--
-  ÖNEMLİ NOTLAR (yarın sabah sen okuyasın diye):
-
-  1) Bu dosya engine.js'i ESM olarak import ediyor. Yani puzzle.html'i direkt
-     dosyadan (file://) değil, bir web sunucu üzerinden açman lazım. descx.art'ı
-     nasıl çalıştırıyorsan (node server.js) aynı şekilde. Aksi halde tarayıcı
-     "CORS" veya "module not allowed" hatası verir.
-
-  2) Değişen ana şey şu: Önceki versiyonda puzzle.html, var olmayan bir
-     GraphEngine.compileGraph() metoduna çağrı yapıyordu. Ben onun yerine
-     burada kendi buildGraph() fonksiyonumu yazdım — mathjs ile ifadeyi
-     derleyip, engine.js'in render() metodunun beklediği graph objesini
-     hazırlıyor (type, expr, compiled, color, xmin, xmax, dx, dy, theta, path).
-
-  3) Eşitsizlikleri (x^2 + y^2 < 9 gibi) implicit olarak çizmek için
-     engine.js'in implicit renderer'ı eval sonucu boolean çıkarsa nokta
-     koyuyor. Yani "<" "<=" ">" ">=" destekleniyor. Sınır çizgisine dönüştürme
-     yapmıyoruz, direkt bölge doldurması yapıyor (engine.js'in drawImplicit'i).
-
-  4) Eğer yarın bir şeyi değiştirmek istersen bakman gereken yerler:
-     - buildGraph()   → graph objesi nasıl hazırlanıyor
-     - renderExpr()   → engine.js'e nasıl çağrı yapılıyor
-     - state.shapes   → hedef şekillerin listesi, yeni şekil eklemek için
--->
+<div id="toast" class="toast"></div>
 
 <script type="module">
-  import { GraphEngine } from './engine.js';
+import { GraphEngine } from './engine.js';
+import * as math from 'https://cdn.jsdelivr.net/npm/mathjs@11.11.0/+esm';
 
-  // ---------- ENGINE'E GRAPH NESNESİ HAZIRLAMA ----------
-  // engine.js'in render() metodu şu alanları olan bir graph objesi bekliyor:
-  //   { type, expr, compiled, color, xmin, xmax, dx, dy, theta, path }
-  // compiled = mathjs ile derlenmiş ifade. path = implicit için cache (ilk
-  // render'da engine kendi dolduruyor, biz undefined bırakıyoruz).
-  function buildGraph(exprStr, color = '#7b5e7b') {
-    if (!exprStr || !exprStr.trim()) return null;
+/* ===================== Canvas & Engine ===================== */
+const cvT = document.getElementById('cvTarget');
+const cvU = document.getElementById('cvUser');
+cvT.width = cvU.width = 600;
+cvT.height = cvU.height = 360;
+const engT = new GraphEngine(cvT, 35);
+const engU = new GraphEngine(cvU, 35);
 
-    // engine.js'in statik detectGraphType'ı var, onu kullan
-    const type = GraphEngine.detectGraphType(exprStr);
+/* ===================== Shapes (zorluga gore) ===================== */
+const SHAPES = [
+  { f:"x^2 + y^2 < 9",                   diff:1, hint:"Daire denklemi: x^2 + y^2 < r^2" },
+  { f:"y < x^2",                          diff:1, hint:"Basit parabol: y < x^2" },
+  { f:"x^2/9 + y^2/4 < 1",               diff:2, hint:"Elips: x^2/a^2 + y^2/b^2 < 1" },
+  { f:"x * y < 4",                        diff:2, hint:"Hiperbolik bolge: x * y < sayi" },
+  { f:"x^2 - y^2 < 4",                    diff:2, hint:"Fark: x^2 - y^2" },
+  { f:"y < x^2 / 3",                      diff:2, hint:"Olcekli parabol: bolme isareti kullan" },
+  { f:"abs(x) + abs(y) < 3",              diff:3, hint:"Elmas/karo: abs(x) + abs(y)" },
+  { f:"y < sin(x * 2) + 2",              diff:3, hint:"Dalga: sin fonksiyonu kullan" },
+  { f:"sin(x) * cos(y) < 0.5",           diff:3, hint:"Desen: sin ve cos carpimiyla olusur" },
+  { f:"(x^2 + y^2 - 4)^3 < x^2 * y^3",  diff:4, hint:"Kalp: parantez ve yuksek usler gerekir" },
+];
 
-    // explicit ise "y=" kısmını at, implicit ise olduğu gibi derle
-    let toCompile = exprStr.replace(/\s+/g, '');
-    if (type === 'explicit' && toCompile.startsWith('y=')) {
-      toCompile = toCompile.slice(2);
+/* ===================== State ===================== */
+let blockIdCounter = 0;
+const state = {
+  level: 1,
+  total: 0,
+  hints: 3,
+  roundScore: 0,
+  currentShape: null,
+  targetCompiled: null,
+  paletteBlocks: [],
+  formulaBlocks: [],
+};
+
+/* ===================== DOM refs ===================== */
+const el = id => document.getElementById(id);
+const paletteEl = el('palette');
+const dropEl = el('drop');
+const formulaEl = el('formulaDisplay');
+
+/* ===================== Toast ===================== */
+let toastTimer = null;
+function toast(msg, type = 'info') {
+  const t = el('toast');
+  t.textContent = msg;
+  t.className = `toast ${type} show`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+/* ===================== Tokenizer ===================== */
+function tokenize(formula) {
+  const clean = formula.replace(/\s+/g, '');
+  const re = /(?:sin|cos|abs|max|min|sqrt)\(|\d+\.?\d*|[xy]\^\d+|<=|>=|[+\-*/^<>()xy,]/g;
+  const tokens = [];
+  let m;
+  while ((m = re.exec(clean)) !== null) tokens.push(m[0]);
+  return tokens;
+}
+
+function classifyToken(t) {
+  if (/^(?:sin|cos|abs|max|min|sqrt)\($/.test(t)) return 'function';
+  if ('+-*/^'.includes(t)) return 'operator';
+  if (/^[<>]=?$/.test(t)) return 'comparison';
+  if (t === '(' || t === ')' || t === ',') return 'bracket';
+  if (/^\d+\.?\d*$/.test(t)) return 'number';
+  return 'term';
+}
+
+/* ===================== Block generation ===================== */
+function makeBlock(value) {
+  return { id: ++blockIdCounter, type: classifyToken(value), value };
+}
+
+function generateBlocks(formula, diff) {
+  const tokens = tokenize(formula);
+  const blocks = tokens.map(makeBlock);
+
+  // Distractor havuzu
+  const distractors = [
+    '+', '-', '*', '/', 'x', 'y', 'x^2', 'y^2', '>', '<',
+    '(', ')', '1', '2', '3', '5', '7',
+  ];
+  if (diff >= 3) distractors.push('sin(', 'cos(', 'abs(');
+
+  const count = Math.min(2 + diff, 6);
+  const used = new Set(tokens);
+  const pool = distractors.filter(d => !used.has(d));
+
+  for (let i = 0; i < count && pool.length; i++) {
+    const k = Math.floor(Math.random() * pool.length);
+    blocks.push(makeBlock(pool.splice(k, 1)[0]));
+  }
+
+  // Karistir
+  for (let i = blocks.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [blocks[i], blocks[j]] = [blocks[j], blocks[i]];
+  }
+  return blocks;
+}
+
+/* ===================== Render blocks ===================== */
+function renderPalette() {
+  paletteEl.innerHTML = '';
+  state.paletteBlocks.forEach(b => {
+    const d = document.createElement('div');
+    d.className = `block ${b.type}`;
+    d.textContent = b.value;
+    d.dataset.id = b.id;
+    d.addEventListener('click', () => moveToDrop(b.id));
+    paletteEl.appendChild(d);
+  });
+}
+
+function renderDrop() {
+  dropEl.innerHTML = '';
+  state.formulaBlocks.forEach(b => {
+    const d = document.createElement('div');
+    d.className = `block ${b.type}`;
+    d.textContent = b.value;
+    d.dataset.id = b.id;
+    d.addEventListener('click', () => moveToPalette(b.id));
+    dropEl.appendChild(d);
+  });
+  updateFormula();
+}
+
+/* ===================== Block movement ===================== */
+function moveToDrop(blockId) {
+  const idx = state.paletteBlocks.findIndex(b => b.id === blockId);
+  if (idx === -1) return;
+  const [block] = state.paletteBlocks.splice(idx, 1);
+  state.formulaBlocks.push(block);
+  renderPalette();
+  renderDrop();
+}
+
+function moveToPalette(blockId) {
+  const idx = state.formulaBlocks.findIndex(b => b.id === blockId);
+  if (idx === -1) return;
+  const [block] = state.formulaBlocks.splice(idx, 1);
+  state.paletteBlocks.push(block);
+  renderPalette();
+  renderDrop();
+}
+
+function clearFormula() {
+  state.paletteBlocks.push(...state.formulaBlocks);
+  state.formulaBlocks = [];
+  renderPalette();
+  renderDrop();
+}
+
+/* ===================== Formula validation & rendering ===================== */
+function getFormulaString() {
+  return state.formulaBlocks.map(b => b.value).join(' ');
+}
+
+function validateFormula(expr) {
+  if (!expr.trim()) return { valid: false, error: null };
+  try {
+    const compiled = math.compile(expr);
+    const result = compiled.evaluate({ x: 1, y: 1 });
+    if (typeof result === 'boolean') return { valid: true, compiled, isInequality: true };
+    if (typeof result === 'number' && isFinite(result)) return { valid: true, compiled, isInequality: false };
+    return { valid: false, error: 'Gecersiz sonuc' };
+  } catch (e) {
+    return { valid: false, error: e.message };
+  }
+}
+
+function updateFormula() {
+  const expr = getFormulaString();
+  const v = validateFormula(expr);
+
+  formulaEl.textContent = expr || ' ';
+  formulaEl.className = 'formula-display';
+
+  if (!expr.trim()) {
+    renderUserCanvas(null);
+    return;
+  }
+
+  if (!v.valid) {
+    formulaEl.classList.add('error');
+    renderUserCanvas(null);
+    return;
+  }
+
+  if (!v.isInequality) {
+    formulaEl.classList.add('needs-ineq');
+    formulaEl.textContent = expr + '  (esitsizlik operatoru ekle: < veya >)';
+    renderUserCanvas(null);
+    return;
+  }
+
+  formulaEl.classList.add('valid');
+  renderUserCanvas(v.compiled);
+}
+
+/* ===================== Canvas rendering ===================== */
+function renderTargetCanvas() {
+  if (!state.targetCompiled) { engT.render([]); return; }
+  engT.render([{
+    type: 'implicit', compiled: state.targetCompiled,
+    xmin: -10, xmax: 10, dx: 0, dy: 0, theta: 0,
+    color: '#5e7b5e', pointSize: 2
+  }]);
+}
+
+function renderUserCanvas(compiled) {
+  if (!compiled) { engU.render([]); updateSimilarity(0); return; }
+  engU.render([{
+    type: 'implicit', compiled,
+    xmin: -10, xmax: 10, dx: 0, dy: 0, theta: 0,
+    color: '#7b5e7b', pointSize: 2
+  }]);
+  const sim = computeSimilarity(state.targetCompiled, compiled);
+  updateSimilarity(sim);
+}
+
+/* ===================== Similarity (fonksiyon bazli) ===================== */
+function computeSimilarity(targetCompiled, userCompiled) {
+  if (!targetCompiled || !userCompiled) return 0;
+  const N = 70;
+  const range = 10;
+  let intersection = 0, union = 0;
+
+  for (let i = 0; i < N; i++) {
+    const x = -range + (2 * range * i) / (N - 1);
+    for (let j = 0; j < N; j++) {
+      const y = -range + (2 * range * j) / (N - 1);
+      let t = false, u = false;
+      try { t = targetCompiled.evaluate({ x, y }) === true; } catch {}
+      try { u = userCompiled.evaluate({ x, y }) === true; } catch {}
+      if (t || u) union++;
+      if (t && u) intersection++;
     }
+  }
+  return union > 0 ? Math.round((intersection / union) * 100) : 0;
+}
 
-    let compiled;
-    try {
-      compiled = math.compile(toCompile);
-    } catch (e) {
-      console.warn('Derleme hatası:', exprStr, e.message);
-      return null;
-    }
+function updateSimilarity(pct) {
+  el('simTxt').textContent = pct;
+  const bar = el('simBar');
+  bar.style.width = pct + '%';
+  if (pct >= 85) bar.style.background = 'linear-gradient(90deg,#5a9a5a,#3a7a3a)';
+  else if (pct >= 50) bar.style.background = 'linear-gradient(90deg,#d6b86a,#b38a3e)';
+  else bar.style.background = 'linear-gradient(90deg,#c4a060,#a08040)';
+}
 
-    return {
-      type,
-      expr: exprStr,
-      compiled,
-      color,
-      xmin: -10,
-      xmax: 10,
-      dx: 0,
-      dy: 0,
-      theta: 0,
-      path: undefined,
-      pointSize: 2,
-      lineWidth: 2.5,
-    };
+/* ===================== Level management ===================== */
+function shapesForLevel(level) {
+  if (level <= 2) return SHAPES.filter(s => s.diff <= 1);
+  if (level <= 5) return SHAPES.filter(s => s.diff <= 2);
+  if (level <= 8) return SHAPES.filter(s => s.diff <= 3);
+  return SHAPES;
+}
+
+function newLevel() {
+  const pool = shapesForLevel(state.level);
+  state.currentShape = pool[Math.floor(Math.random() * pool.length)];
+
+  try {
+    state.targetCompiled = math.compile(state.currentShape.f);
+  } catch { return; }
+
+  const allBlocks = generateBlocks(state.currentShape.f, state.currentShape.diff);
+  state.paletteBlocks = allBlocks;
+  state.formulaBlocks = [];
+  state.roundScore = 0;
+
+  el('levelNum').textContent = state.level;
+  el('hintCnt').textContent = state.hints;
+  el('hintTxt').textContent = '';
+  el('scoreTxt').textContent = '0';
+
+  renderPalette();
+  renderDrop();
+  renderTargetCanvas();
+}
+
+/* ===================== Check & scoring ===================== */
+function checkAnswer() {
+  const expr = getFormulaString();
+  const v = validateFormula(expr);
+
+  if (!v.valid || !v.isInequality) {
+    toast('Gecerli bir esitsizlik formulu olustur', 'error');
+    return;
   }
 
-  // Verilen ifadeyi verilen engine üzerinde çiz (yoksa sadece boş grid+eksen)
-  function renderExpr(engine, exprStr, color) {
-    // engine.js'in render() fonksiyonu zaten clear+grid+axes yapıyor
-    const g = buildGraph(exprStr, color);
-    if (!g) {
-      engine.render([]); // boş dizi = sadece grid + eksen
-      return;
-    }
-    engine.render([g]);
-  }
+  const sim = computeSimilarity(state.targetCompiled, v.compiled);
+  updateSimilarity(sim);
 
-  // ---------- CANVAS KURULUMU ----------
-  const cvT = document.getElementById('cvTarget');
-  const cvU = document.getElementById('cvUser');
-  // Canvas'ın gerçek piksel boyutunu sabit tutuyoruz (CSS ile ayrıca stretched)
-  cvT.width = cvU.width = 600;
-  cvT.height = cvU.height = 360;
-
-  const engT = new GraphEngine(cvT, 35);
-  const engU = new GraphEngine(cvU, 35);
-
-  // ---------- OYUN DURUMU ----------
-  const el = (id) => document.getElementById(id);
-  const state = {
-    level: 1,
-    total: 0,
-    hint: 3,
-    current: null,
-    blocks: [],
-    constructed: '',
-    shapes: [
-      { name: 'Daire',   f: 'x^2 + y^2 < 9',                 diff: 1, hint: 'Daire: x² + y² ...' },
-      { name: 'Elips',   f: 'x^2/9 + y^2/4 < 1',             diff: 2, hint: 'Elips: x²/a² + y²/b² ...' },
-      { name: 'Kare',    f: 'abs(x) + abs(y) < 3',           diff: 2, hint: 'Mutlak değer köşeler yapar' },
-      { name: 'Dalga',   f: 'y < sin(x*2) + 2',              diff: 3, hint: 'sin(...) dalga üretir' },
-      { name: 'Hiper',   f: 'x*y < 4',                       diff: 2, hint: 'x·y çarpımı hiperbolik bölgeler' },
-      { name: 'Parabol', f: 'y < x^2/3',                     diff: 2, hint: 'Parabol: x² terimi' },
-      { name: 'Hiper-2', f: 'x^2 - y^2 < 4',                 diff: 2, hint: 'x² - y² farkı' },
-      { name: 'Desen',   f: 'sin(x) * cos(y) < 0.5',         diff: 3, hint: 'trig fonksiyonlar desen verir' },
-    ],
-  };
-
-  function randShape() {
-    return state.shapes[Math.floor(Math.random() * state.shapes.length)];
-  }
-
-  // ---------- TOKENIZER (formülü parçalara böler) ----------
-  function tokenize(formula) {
-    const toks = [];
-    let cur = '';
-    const ops = '+-*/^<>=()';
-    for (const ch of formula) {
-      if (ch === ' ') {
-        if (cur) { toks.push(cur); cur = ''; }
-        continue;
-      }
-      if (ops.includes(ch)) {
-        if (cur) { toks.push(cur); cur = ''; }
-        toks.push(ch);
-      } else {
-        cur += ch;
-      }
-    }
-    if (cur) toks.push(cur);
-
-    // x ^ 2 gibi dağınıkları birleştir → "x^2"
-    const merged = [];
-    for (let i = 0; i < toks.length; i++) {
-      if (toks[i] === '^' && i > 0 && i < toks.length - 1) {
-        const base = merged.pop();
-        merged.push(base + '^' + toks[i + 1]);
-        i++;
-      } else {
-        merged.push(toks[i]);
-      }
-    }
-    return merged;
-  }
-
-  function blockType(t) {
-    if ('+-*/^'.includes(t)) return 'operator';
-    if ('<=>'.includes(t))   return 'comparison';
-    if (t === '(' || t === ')') return 'bracket';
-    if (!isNaN(t))           return 'number';
-    if (/sin|cos|abs|max|min|sqrt|atan2/.test(t)) return 'function';
-    return 'term';
-  }
-
-  function makeBlocks(formula, diff) {
-    const toks = tokenize(formula);
-    const core = toks.map((v) => ({ type: blockType(v), value: v }));
-
-    // Zorluğa göre birkaç "yanıltıcı" parça ekle
-    const extrasPool = [
-      { type: 'number',     value: String(1 + Math.floor(Math.random() * 9)) },
-      { type: 'operator',   value: '+' },
-      { type: 'operator',   value: '-' },
-      { type: 'operator',   value: '*' },
-      { type: 'operator',   value: '/' },
-      { type: 'term',       value: 'x' },
-      { type: 'term',       value: 'y' },
-      { type: 'term',       value: 'x^2' },
-      { type: 'term',       value: 'y^2' },
-      { type: 'function',   value: 'sin(' },
-      { type: 'function',   value: 'cos(' },
-      { type: 'function',   value: 'abs(' },
-      { type: 'comparison', value: '>' },
-    ].filter((b) => !formula.includes(b.value) && !(diff < 3 && b.type === 'function'));
-
-    const count = Math.min(2 * diff, 5);
-    for (let i = 0; i < count && extrasPool.length; i++) {
-      const k = Math.floor(Math.random() * extrasPool.length);
-      core.push(extrasPool.splice(k, 1)[0]);
-    }
-
-    // Karıştır
-    for (let i = core.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [core[i], core[j]] = [core[j], core[i]];
-    }
-    return core;
-  }
-
-  // ---------- PALET RENDER ----------
-  function renderPalette() {
-    const pal = el('palette');
-    pal.innerHTML = '';
-    state.blocks.forEach((b, idx) => {
-      const d = document.createElement('div');
-      d.className = `block ${b.type}`;
-      d.textContent = b.value;
-      d.draggable = true;
-      d.dataset.idx = idx;
-      d.dataset.val = b.value;
-      d.dataset.type = b.type;
-      d.addEventListener('dragstart', (ev) => {
-        ev.dataTransfer.setData('text/plain', JSON.stringify(b));
-      });
-      pal.appendChild(d);
-    });
-  }
-
-  // ---------- DROP ZONE ----------
-  function setFormulaFromDrop() {
-    const drop = el('drop');
-    const parts = [...drop.children].map((c) => c.dataset.val);
-    state.constructed = parts.join(' ');
-    el('formula').textContent = state.constructed;
-    drawUser();
-  }
-
-  function attachDrop() {
-    const drop = el('drop');
-    drop.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      drop.classList.add('drag');
-    });
-    drop.addEventListener('dragleave', () => drop.classList.remove('drag'));
-    drop.addEventListener('drop', (e) => {
-      e.preventDefault();
-      drop.classList.remove('drag');
-      let data;
-      try {
-        data = JSON.parse(e.dataTransfer.getData('text/plain') || '');
-      } catch (_) {}
-      if (!data) return;
-
-      const n = document.createElement('div');
-      n.className = `block ${data.type}`;
-      n.textContent = data.value;
-      n.dataset.val = data.value;
-      n.dataset.type = data.type;
-      n.draggable = true;
-      n.addEventListener('dragstart', (ev) => {
-        ev.dataTransfer.setData(
-          'text/plain',
-          JSON.stringify({ type: n.dataset.type, value: n.dataset.val })
-        );
-      });
-      n.addEventListener('dblclick', () => {
-        n.remove();
-        setFormulaFromDrop();
-      });
-      drop.appendChild(n);
-      setFormulaFromDrop();
-    });
-  }
-
-  // ---------- ÇİZİM ----------
-  function drawTarget() {
-    renderExpr(engT, state.current.f, '#7b9b7b');
-  }
-
-  function drawUser() {
-    renderExpr(engU, state.constructed, '#7b5e7b');
-    updateSimilarity();
-  }
-
-  // ---------- BENZERLİK ÖLÇÜMÜ ----------
-  // İki canvas'taki "dolu" pikselleri Jaccard benzerliği ile karşılaştır.
-  // Grid ve eksen piksellerini eleyerek sadece grafiğin bıraktığı izi sayıyoruz.
-  function contentMask(ctx, w, h) {
-    const id = ctx.getImageData(0, 0, w, h).data;
-    // 4 piksel adımla örnekleme — hız için
-    const mask = new Uint8Array(w * h);
-    for (let i = 0, p = 0; i < id.length; i += 16, p++) {
-      const r = id[i];
-      const g = id[i + 1];
-      const b = id[i + 2];
-      const a = id[i + 3];
-      // Grid rengi (#e8dcc0 ~ 232,220,192) ve eksen (#8b6f3e ~ 139,111,62) elenir
-      const isGridLight = r > 220 && g > 210 && b > 180;
-      const isGridDark  = r > 200 && g > 180 && b > 150;
-      const isAxis      = r === 139 && g === 111 && b === 62;
-      const isBackground = r > 250 && g > 240 && b > 220;
-      mask[p] = a > 100 && !isGridLight && !isGridDark && !isAxis && !isBackground ? 1 : 0;
-    }
-    return mask;
-  }
-
-  function jaccard(maskA, maskB) {
-    let inter = 0;
-    let union = 0;
-    const n = Math.min(maskA.length, maskB.length);
-    for (let i = 0; i < n; i++) {
-      const a = maskA[i];
-      const b = maskB[i];
-      if (a | b) union++;
-      if (a & b) inter++;
-    }
-    return union ? inter / union : 0;
-  }
-
-  function updateSimilarity() {
-    const tctx = cvT.getContext('2d');
-    const uctx = cvU.getContext('2d');
-    const mT = contentMask(tctx, cvT.width, cvT.height);
-    const mU = contentMask(uctx, cvU.width, cvU.height);
-    let s = jaccard(mT, mU) * 100;
-    // ×2 çarpanı: implicit çizim seyrek olduğu için benzerliği büyütüyoruz
-    s = Math.min(100, Math.round(s * 2));
-    el('simTxt').textContent = s;
-    el('simBar').style.width = s + '%';
-    if (s > 85) onSuccess(s);
-  }
-
-  function onSuccess(sim) {
-    const score = Math.round(sim * state.current.diff);
+  if (sim >= 85) {
+    const score = Math.round(sim * state.currentShape.diff / 2);
+    state.roundScore = score;
     state.total += score;
     el('scoreTxt').textContent = score;
     el('totalTxt').textContent = state.total;
-    el('hintTxt').textContent = `Harika! +${score} puan`;
     el('userCard').classList.add('glow');
-    setTimeout(() => el('userCard').classList.remove('glow'), 900);
+    setTimeout(() => el('userCard').classList.remove('glow'), 800);
+    toast(`Harika! +${score} puan (%${sim} benzerlik)`, 'success');
+  } else if (sim >= 50) {
+    toast(`Yaklasiyorsun! %${sim} benzerlik`, 'info');
+  } else {
+    toast(`%${sim} benzerlik — devam et`, 'info');
   }
+}
 
-  // ---------- YENİ SEVİYE ----------
-  function newLevel() {
-    state.current = randShape();
-    state.blocks = makeBlocks(state.current.f, state.current.diff);
-    state.constructed = '';
-    el('drop').innerHTML = '';
-    el('formula').textContent = '';
-    renderPalette();
-    drawTarget();
-    drawUser();
-    el('levelNum').textContent = state.level;
-    el('hintCnt').textContent = state.hint;
-    el('hintTxt').textContent = '';
-    el('scoreTxt').textContent = '0';
+/* ===================== Event listeners ===================== */
+el('btnClear').addEventListener('click', clearFormula);
+
+el('btnShuffle').addEventListener('click', () => {
+  for (let i = state.paletteBlocks.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [state.paletteBlocks[i], state.paletteBlocks[j]] = [state.paletteBlocks[j], state.paletteBlocks[i]];
   }
+  renderPalette();
+});
 
-  // ---------- KONTROL BUTONLARI ----------
-  el('btnClear').onclick = () => {
-    el('drop').innerHTML = '';
-    setFormulaFromDrop();
-  };
-  el('btnShuffle').onclick = () => {
-    state.blocks.sort(() => Math.random() - 0.5);
-    renderPalette();
-  };
-  el('btnHint').onclick = () => {
-    if (state.hint > 0) {
-      state.hint--;
-      el('hintCnt').textContent = state.hint;
-      el('hintTxt').textContent = state.current.hint;
-      setTimeout(() => (el('hintTxt').textContent = ''), 4500);
-    } else {
-      el('hintTxt').textContent = 'İpucu hakkın bitti!';
-    }
-  };
-  el('btnCheck').onclick = () => updateSimilarity();
-  el('btnNew').onclick = () => {
-    state.level++;
-    state.hint = 3;
-    newLevel();
-  };
+el('btnHint').addEventListener('click', () => {
+  if (state.hints <= 0) {
+    toast('Ipucu hakkin bitti', 'error');
+    return;
+  }
+  state.hints--;
+  el('hintCnt').textContent = state.hints;
+  el('hintTxt').textContent = state.currentShape.hint;
+  setTimeout(() => el('hintTxt').textContent = '', 5000);
+});
 
-  // ---------- BAŞLAT ----------
-  attachDrop();
+el('btnCheck').addEventListener('click', checkAnswer);
+
+el('btnNext').addEventListener('click', () => {
+  state.level++;
+  state.hints = 3;
   newLevel();
+});
+
+/* ===================== Init ===================== */
+newLevel();
 </script>
 </body>
 </html>
