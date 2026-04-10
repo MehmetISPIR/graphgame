@@ -39,15 +39,6 @@ app.use((req, res, next) => {
     next();
 });
 
-// 2. Aşama: Socket.io Bağlantısı (Oyun Gerçekten Başladı mı?)
-io.on("connection", (socket) => {
-    // Bu log, sadece Socket.io bağlantısı kurulduğunda, yani oyun gerçekten başladığında görünür.
-    // Bu, ticari potansiyelin en güçlü kanıtıdır.
-    console.log(` OYUNCU BAĞLANDI! Socket ID: ${socket.id} (Bu kesinlikle bir insan)`);
-
-    // ... kodun geri kalanı ...
-});
-
 // 📽 Public klasör
 app.use(express.static(path.join(__dirname, "public")));
 
@@ -158,7 +149,15 @@ function emitGameState(roomId) {
 function gameStart(roomId, options = {}) {
   const r = rooms.get(roomId);
   if (!r) return;
-  Object.assign(r.cfg, options);
+  if (options && typeof options === "object") {
+    if (Number.isFinite(options.roundSec) && options.roundSec >= 10 && options.roundSec <= 600) {
+      r.cfg.roundSec = options.roundSec;
+    }
+    if (Number.isFinite(options.interSec) && options.interSec >= 0 && options.interSec <= 30) {
+      r.cfg.interSec = options.interSec;
+    }
+    if (typeof options.loopSets === "boolean") r.cfg.loopSets = options.loopSets;
+  }
   r.inGame = true;
   r.state = "ROUND";
   r.paintersDone.clear();
@@ -271,16 +270,20 @@ io.on("connection", (socket) => {
   });
 
   socket.on("join", ({ room, user }) => {
+    if (!room || !user || !user.name) {
+      socket.emit("errorMsg", { code: "invalid_join" });
+      return;
+    }
     const r = ensureRoom(room);
     if (r.users.length >= r.maxUsers) {
-      socket.emit("errorMsg", "Oda dolu");
+      socket.emit("errorMsg", { code: "room_full" });
       return;
     }
 
     const already = r.users.find((u) => u.id === socket.id);
     if (!already) {
       r.users.push({ id: socket.id, name: user.name, role: "viewer" });
-      r.scores[socket.id] = 0;
+      if (r.scores[user.name] == null) r.scores[user.name] = 0;
     }
 
     socket.join(room);
@@ -329,7 +332,7 @@ io.on("connection", (socket) => {
     if (!user) return;
 
     if (wordMatches(r.word, guess)) {
-      r.scores[socket.id] += 10;
+      r.scores[user.name] = (r.scores[user.name] || 0) + 10;
       io.to(room).emit("guessResult", {
         correct: true,
         word: r.word,
@@ -350,6 +353,8 @@ io.on("connection", (socket) => {
   socket.on("game:start", ({ room, options } = {}) => {
     const r = rooms.get(room);
     if (!r) return;
+    if (!socket.rooms.has(room)) return;
+    if (!r.users.some((u) => u.id === socket.id)) return;
     if (!r.inGame && r.users.length >= 2) gameStart(room, options || {});
   });
 
@@ -360,7 +365,6 @@ io.on("connection", (socket) => {
 
       const wasPainter = r.currentPainter === socket.id;
       r.users.splice(index, 1);
-      delete r.scores[socket.id];
       r.paintersDone.delete(socket.id);
 
       if (r.users.length === 0) {
@@ -371,18 +375,24 @@ io.on("connection", (socket) => {
 
       io.to(name).emit("users", r.users);
 
-      // Ressam çıktıysa turu standart şekilde kapat
-      if (wasPainter && r.inGame) {
+      // Üç olası dal — tam olarak bir tanesi çalışır:
+      if (r.users.length < 2) {
+        // 1) Yetersiz oyuncu: oyunu doğrudan bitir, ara event yok
+        if (r.inGame) {
+          clearTimers(r);
+          r.inGame = false;
+          r.state = "GAME_OVER";
+          r.currentPainter = null;
+          r.roundStartTime = null;
+          r.paintersDone.clear();
+          io.to(name).emit("gameOver", r.scores);
+          io.to(name).emit("game:end", { scores: r.scores });
+        }
+      } else if (wasPainter && r.inGame) {
+        // 2) Ressam çıktı ama oyun devam edebilir: turu standart şekilde kapat
         endRound(name, "timeout");
       }
-
-      // Oyuncu sayısı 2'nin altına düştüyse oyunu bitir
-      if (r.users.length < 2) {
-        r.inGame = false;
-        r.state = "GAME_OVER";
-        clearTimers(r);
-        io.to(name).emit("gameOver", r.scores);
-      }
+      // 3) Normal oyuncu çıkışı, oyun aynen devam eder
     }
     broadcastRoomList();
   });
