@@ -274,16 +274,61 @@ io.on("connection", (socket) => {
       socket.emit("errorMsg", { code: "invalid_join" });
       return;
     }
-    const r = ensureRoom(room);
-    if (r.users.length >= r.maxUsers) {
-      socket.emit("errorMsg", { code: "room_full" });
+    const name = String(user.name).trim().slice(0, 32);
+    if (!name) {
+      socket.emit("errorMsg", { code: "invalid_join" });
       return;
     }
 
-    const already = r.users.find((u) => u.id === socket.id);
-    if (!already) {
-      r.users.push({ id: socket.id, name: user.name, role: "viewer" });
-      if (r.scores[user.name] == null) r.scores[user.name] = 0;
+    // Bu socket başka bir odadaysa önce oradan çık (multi-room önleme)
+    for (const [otherName, otherRoom] of rooms.entries()) {
+      if (otherName === room) continue;
+      const idx = otherRoom.users.findIndex((u) => u.id === socket.id);
+      if (idx !== -1) {
+        otherRoom.users.splice(idx, 1);
+        otherRoom.paintersDone.delete(socket.id);
+        socket.leave(otherName);
+        io.to(otherName).emit("users", otherRoom.users);
+        if (otherRoom.users.length < 2 && otherRoom.inGame) {
+          clearTimers(otherRoom);
+          otherRoom.inGame = false;
+          otherRoom.state = "GAME_OVER";
+          otherRoom.currentPainter = null;
+          otherRoom.roundStartTime = null;
+          otherRoom.paintersDone.clear();
+          io.to(otherName).emit("gameOver", otherRoom.scores);
+        }
+      }
+    }
+
+    const r = ensureRoom(room);
+
+    // Aynı isimde bir kullanıcı var mı?
+    const existing = r.users.find((u) => u.name === name);
+    if (existing) {
+      // Eski socket hâlâ bağlı ise gerçek çarpışma → reddet
+      const oldSocket = io.sockets.sockets.get(existing.id);
+      if (existing.id !== socket.id && oldSocket && oldSocket.connected) {
+        socket.emit("errorMsg", { code: "name_taken" });
+        return;
+      }
+      // Aksi halde reconnect: eski kaydın socket.id'sini güncelle
+      if (existing.id !== socket.id) {
+        const oldId = existing.id;
+        existing.id = socket.id;
+        if (r.currentPainter === oldId) r.currentPainter = socket.id;
+        if (r.paintersDone.has(oldId)) {
+          r.paintersDone.delete(oldId);
+          r.paintersDone.add(socket.id);
+        }
+      }
+    } else {
+      if (r.users.length >= r.maxUsers) {
+        socket.emit("errorMsg", { code: "room_full" });
+        return;
+      }
+      r.users.push({ id: socket.id, name, role: "viewer" });
+      if (r.scores[name] == null) r.scores[name] = 0;
     }
 
     socket.join(room);
@@ -292,13 +337,13 @@ io.on("connection", (socket) => {
 
     // Devam eden oyuna katılıyorsa
     if (r.inGame && r.currentPainter && r.roundStartTime) {
-      socket.emit("newGame", { 
-        room, 
+      socket.emit("newGame", {
+        room,
         roles: r.users,
-        roundStartTime: r.roundStartTime,  // Mevcut round'un başlangıç zamanı
-        roundDuration: r.cfg.roundSec       // Toplam süre
+        roundStartTime: r.roundStartTime,
+        roundDuration: r.cfg.roundSec,
       });
-      
+
       if (socket.id === r.currentPainter) {
         socket.emit("wordForPainter", r.word);
       }
@@ -311,8 +356,22 @@ io.on("connection", (socket) => {
   socket.on("addGraph", ({ room, graph }) => {
     const r = rooms.get(room);
     if (!r || r.currentPainter !== socket.id) return;
+    if (!graph || typeof graph !== "object") return;
+    if (typeof graph.expr !== "string" || !graph.expr.length || graph.expr.length > 200) return;
+    if (r.graphs.length >= 100) return;
 
-    r.graphs.push(graph);
+    // Yalnızca güvenli alanları kopyala — client ne gönderirse göndersin
+    const clean = {
+      type: typeof graph.type === "string" ? graph.type : "explicit",
+      expr: graph.expr,
+      xmin: Number.isFinite(graph.xmin) ? graph.xmin : -10,
+      xmax: Number.isFinite(graph.xmax) ? graph.xmax : 10,
+      dx: Number.isFinite(graph.dx) ? graph.dx : 0,
+      dy: Number.isFinite(graph.dy) ? graph.dy : 0,
+      theta: Number.isFinite(graph.theta) ? graph.theta : 0,
+      color: typeof graph.color === "string" && graph.color.length <= 32 ? graph.color : "#b00",
+    };
+    r.graphs.push(clean);
     io.to(room).emit("graphs", r.graphs);
   });
 
