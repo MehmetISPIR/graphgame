@@ -6,7 +6,7 @@
 <title>Mathematical Art Puzzle — descx.art</title>
 <link rel="icon" href="/favicon.ico" type="image/x-icon">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&family=Noto+Sans+Devanagari:wght@400;700&display=swap" rel="stylesheet">
 
 <style>
 :root{
@@ -16,10 +16,26 @@
 *{box-sizing:border-box}
 body{
   margin:0;padding:20px;min-height:100vh;color:var(--ink);
-  font-family:"Libre Baskerville",Georgia,serif;
+  font-family:"Libre Baskerville","Noto Sans Devanagari",Georgia,serif;
   background:
     radial-gradient(1200px 700px at 50% 0%,#f8f1e6 0%,#efe3cd 60%,#e6d5b5 100%),
     repeating-linear-gradient(10deg,#0000 0 24px,#00000006 24px 25px);
+}
+
+/* Dil seçici */
+.lang-switcher{
+  position:absolute; top:16px; right:20px;
+  display:flex; gap:4px; z-index:10;
+}
+.lang-btn{
+  padding:4px 10px; font-size:12px; font-weight:700;
+  border:1px solid var(--gold); border-radius:6px;
+  background:#fffdf9; color:var(--muted); cursor:pointer;
+  font-family: inherit;
+}
+.lang-btn:hover{ background:#fff7e9; }
+.lang-btn.active{
+  background:linear-gradient(#e9d6a6,#d6b86a); color:#3a2a0d;
 }
 .frame{
   max-width:1200px;margin:28px auto;padding:20px;background:var(--parchment);
@@ -45,10 +61,10 @@ canvas{display:block;width:100%;height:360px;background:#fffaf0;border:1px solid
 .section{background:var(--paper);border:1px solid var(--border);border-radius:12px;padding:14px;margin:12px 0;box-shadow:inset 0 0 0 1px #ffffff80}
 
 .blocks{display:flex;flex-wrap:wrap;gap:8px;padding:12px;background:#f9f5ed;border:1px dashed var(--border);border-radius:10px;min-height:52px;cursor:pointer}
-.blocks:empty::after{content:"Tum parcalar kullanildi";color:var(--muted);font-style:italic;font-size:13px}
+.blocks:empty::after{content:attr(data-empty);color:var(--muted);font-style:italic;font-size:13px}
 
 .drop{display:flex;flex-wrap:wrap;gap:8px;align-items:center;min-height:52px;padding:12px;border:2px dashed var(--border);border-radius:10px;background:#fffdf9;cursor:pointer}
-.drop:empty::after{content:"Parcalara tiklayarak formul olustur";color:var(--muted);font-style:italic;font-size:13px}
+.drop:empty::after{content:attr(data-empty);color:var(--muted);font-style:italic;font-size:13px}
 
 .block{
   padding:8px 12px;border-radius:8px;font:700 14px/1 'Courier New',monospace;
@@ -106,55 +122,56 @@ button.secondary{background:linear-gradient(#efe3cd,#e0d0b0)}
 </head>
 <body>
 <main class="frame">
+  <div id="langHost"></div>
   <div class="game">
     <div class="header">
       <h1>Mathematical Art Puzzle</h1>
       <div class="stats">
-        <span>Seviye <strong id="levelNum">1</strong></span>
-        <span>Benzerlik <strong id="simTxt">0</strong>%</span>
-        <span>Ipucu <strong id="hintCnt">3</strong></span>
-        <span>Toplam <strong id="totalTxt">0</strong></span>
+        <span><span data-i18n="puzzle_level">Seviye</span> <strong id="levelNum">1</strong></span>
+        <span><span data-i18n="puzzle_similarity">Benzerlik</span> <strong id="simTxt">0</strong>%</span>
+        <span><span data-i18n="puzzle_hint_count">İpucu</span> <strong id="hintCnt">3</strong></span>
+        <span><span data-i18n="puzzle_total">Toplam</span> <strong id="totalTxt">0</strong></span>
       </div>
     </div>
 
     <div class="grid">
       <div class="card">
-        <span class="label">Hedef Sekil</span>
+        <span class="label" data-i18n="puzzle_target">Hedef Şekil</span>
         <canvas id="cvTarget"></canvas>
       </div>
       <div class="card" id="userCard">
-        <span class="label">Senin Cizimin</span>
+        <span class="label" data-i18n="puzzle_your_drawing">Senin Çizimin</span>
         <canvas id="cvUser"></canvas>
         <div class="similarity"><div id="simBar" class="sim-fill"></div></div>
       </div>
     </div>
 
     <div class="section">
-      <h4>Yapboz Parcalari</h4>
+      <h4 data-i18n="puzzle_pieces_heading">Yapboz Parçaları</h4>
       <div id="palette" class="blocks"></div>
     </div>
 
     <div class="section">
-      <h4>Formul Olusturma Alani</h4>
+      <h4 data-i18n="puzzle_formula_area">Formül Oluşturma Alanı</h4>
       <div id="drop" class="drop"></div>
       <div id="formulaDisplay" class="formula-display"></div>
     </div>
 
     <div class="controls">
-      <button class="secondary" id="btnClear">Temizle</button>
-      <button id="btnHint">Ipucu</button>
-      <button class="secondary" id="btnShuffle">Karistir</button>
-      <button id="btnCheck">Kontrol Et</button>
-      <button id="btnNext">Sonraki</button>
+      <button class="secondary" id="btnClear" data-i18n="puzzle_btn_clear">Temizle</button>
+      <button id="btnHint" data-i18n="puzzle_btn_hint">İpucu</button>
+      <button class="secondary" id="btnShuffle" data-i18n="puzzle_btn_shuffle">Karıştır</button>
+      <button id="btnCheck" data-i18n="puzzle_btn_check">Kontrol Et</button>
+      <button id="btnNext" data-i18n="puzzle_btn_next">Sonraki</button>
     </div>
 
     <div class="row">
       <div class="box">
-        <div>Bu Tur</div>
+        <div data-i18n="puzzle_this_round">Bu Tur</div>
         <div id="scoreTxt" class="big">0</div>
       </div>
       <div class="box">
-        <div>Ipucu</div>
+        <div data-i18n="puzzle_hint_label">İpucu</div>
         <div id="hintTxt" class="hint-text"></div>
       </div>
     </div>
@@ -166,6 +183,10 @@ button.secondary{background:linear-gradient(#efe3cd,#e0d0b0)}
 <script type="module">
 import { GraphEngine } from './engine.js';
 import * as math from 'https://cdn.jsdelivr.net/npm/mathjs@11.11.0/+esm';
+import { t, LANG, applyI18n, createLangSwitcher } from './i18n.js';
+
+applyI18n();
+document.getElementById('langHost').appendChild(createLangSwitcher());
 
 /* ===================== Canvas & Engine ===================== */
 const cvT = document.getElementById('cvTarget');
@@ -176,18 +197,53 @@ const engT = new GraphEngine(cvT, 35);
 const engU = new GraphEngine(cvU, 35);
 
 /* ===================== Shapes (zorluga gore) ===================== */
+/* hint objesi: { tr, en, hi } — mevcut dile göre seçilir */
 const SHAPES = [
-  { f:"x^2 + y^2 < 9",                   diff:1, hint:"Daire denklemi: x^2 + y^2 < r^2" },
-  { f:"y < x^2",                          diff:1, hint:"Basit parabol: y < x^2" },
-  { f:"x^2/9 + y^2/4 < 1",               diff:2, hint:"Elips: x^2/a^2 + y^2/b^2 < 1" },
-  { f:"x * y < 4",                        diff:2, hint:"Hiperbolik bolge: x * y < sayi" },
-  { f:"x^2 - y^2 < 4",                    diff:2, hint:"Fark: x^2 - y^2" },
-  { f:"y < x^2 / 3",                      diff:2, hint:"Olcekli parabol: bolme isareti kullan" },
-  { f:"abs(x) + abs(y) < 3",              diff:3, hint:"Elmas/karo: abs(x) + abs(y)" },
-  { f:"y < sin(x * 2) + 2",              diff:3, hint:"Dalga: sin fonksiyonu kullan" },
-  { f:"sin(x) * cos(y) < 0.5",           diff:3, hint:"Desen: sin ve cos carpimiyla olusur" },
-  { f:"(x^2 + y^2 - 4)^3 < x^2 * y^3",  diff:4, hint:"Kalp: parantez ve yuksek usler gerekir" },
+  { f:"x^2 + y^2 < 9", diff:1, hint:{
+    tr:"Daire denklemi: x^2 + y^2 < r^2",
+    en:"Circle equation: x^2 + y^2 < r^2",
+    hi:"वृत्त: x^2 + y^2 < r^2" } },
+  { f:"y < x^2", diff:1, hint:{
+    tr:"Basit parabol: y < x^2",
+    en:"Simple parabola: y < x^2",
+    hi:"साधारण परवलय: y < x^2" } },
+  { f:"x^2/9 + y^2/4 < 1", diff:2, hint:{
+    tr:"Elips: x^2/a^2 + y^2/b^2 < 1",
+    en:"Ellipse: x^2/a^2 + y^2/b^2 < 1",
+    hi:"दीर्घवृत्त: x^2/a^2 + y^2/b^2 < 1" } },
+  { f:"x * y < 4", diff:2, hint:{
+    tr:"Hiperbolik bölge: x * y < sayı",
+    en:"Hyperbolic region: x * y < number",
+    hi:"अतिपरवलयिक क्षेत्र: x * y < संख्या" } },
+  { f:"x^2 - y^2 < 4", diff:2, hint:{
+    tr:"Fark: x^2 - y^2",
+    en:"Difference: x^2 - y^2",
+    hi:"अंतर: x^2 - y^2" } },
+  { f:"y < x^2 / 3", diff:2, hint:{
+    tr:"Ölçekli parabol: bölme işareti kullan",
+    en:"Scaled parabola: use division",
+    hi:"मापित परवलय: भाग चिह्न का उपयोग करें" } },
+  { f:"abs(x) + abs(y) < 3", diff:3, hint:{
+    tr:"Elmas/karo: abs(x) + abs(y)",
+    en:"Diamond: abs(x) + abs(y)",
+    hi:"हीरा: abs(x) + abs(y)" } },
+  { f:"y < sin(x * 2) + 2", diff:3, hint:{
+    tr:"Dalga: sin fonksiyonu kullan",
+    en:"Wave: use sin function",
+    hi:"तरंग: sin फलन का उपयोग करें" } },
+  { f:"sin(x) * cos(y) < 0.5", diff:3, hint:{
+    tr:"Desen: sin ve cos çarpımıyla oluşur",
+    en:"Pattern: product of sin and cos",
+    hi:"पैटर्न: sin और cos का गुणनफल" } },
+  { f:"(x^2 + y^2 - 4)^3 < x^2 * y^3", diff:4, hint:{
+    tr:"Kalp: parantez ve yüksek üsler gerekir",
+    en:"Heart: parentheses and high powers needed",
+    hi:"हृदय: कोष्ठक और उच्च घात चाहिए" } },
 ];
+
+function shapeHint(shape) {
+  return (shape.hint && (shape.hint[LANG] || shape.hint.tr)) || '';
+}
 
 /* ===================== State ===================== */
 let blockIdCounter = 0;
@@ -207,6 +263,10 @@ const el = id => document.getElementById(id);
 const paletteEl = el('palette');
 const dropEl = el('drop');
 const formulaEl = el('formulaDisplay');
+
+/* Boş alan placeholder metinlerini mevcut dile göre ayarla */
+paletteEl.setAttribute('data-empty', t('puzzle_all_used'));
+dropEl.setAttribute('data-empty', t('puzzle_click_blocks'));
 
 /* ===================== Toast ===================== */
 let toastTimer = null;
@@ -334,7 +394,7 @@ function validateFormula(expr) {
     const result = compiled.evaluate({ x: 1, y: 1 });
     if (typeof result === 'boolean') return { valid: true, compiled, isInequality: true };
     if (typeof result === 'number' && isFinite(result)) return { valid: true, compiled, isInequality: false };
-    return { valid: false, error: 'Gecersiz sonuc' };
+    return { valid: false, error: t('puzzle_invalid_result') };
   } catch (e) {
     return { valid: false, error: e.message };
   }
@@ -360,7 +420,7 @@ function updateFormula() {
 
   if (!v.isInequality) {
     formulaEl.classList.add('needs-ineq');
-    formulaEl.textContent = expr + '  (esitsizlik operatoru ekle: < veya >)';
+    formulaEl.textContent = expr + '  (' + t('puzzle_needs_ineq') + ')';
     renderUserCanvas(null);
     return;
   }
@@ -457,7 +517,7 @@ function checkAnswer() {
   const v = validateFormula(expr);
 
   if (!v.valid || !v.isInequality) {
-    toast('Gecerli bir esitsizlik formulu olustur', 'error');
+    toast(t('puzzle_invalid_formula'), 'error');
     return;
   }
 
@@ -472,11 +532,11 @@ function checkAnswer() {
     el('totalTxt').textContent = state.total;
     el('userCard').classList.add('glow');
     setTimeout(() => el('userCard').classList.remove('glow'), 800);
-    toast(`Harika! +${score} puan (%${sim} benzerlik)`, 'success');
+    toast(t('puzzle_great', score, sim), 'success');
   } else if (sim >= 50) {
-    toast(`Yaklasiyorsun! %${sim} benzerlik`, 'info');
+    toast(t('puzzle_getting_close', sim), 'info');
   } else {
-    toast(`%${sim} benzerlik — devam et`, 'info');
+    toast(t('puzzle_keep_going', sim), 'info');
   }
 }
 
@@ -493,12 +553,12 @@ el('btnShuffle').addEventListener('click', () => {
 
 el('btnHint').addEventListener('click', () => {
   if (state.hints <= 0) {
-    toast('Ipucu hakkin bitti', 'error');
+    toast(t('puzzle_no_hints'), 'error');
     return;
   }
   state.hints--;
   el('hintCnt').textContent = state.hints;
-  el('hintTxt').textContent = state.currentShape.hint;
+  el('hintTxt').textContent = shapeHint(state.currentShape);
   setTimeout(() => el('hintTxt').textContent = '', 5000);
 });
 

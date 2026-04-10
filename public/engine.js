@@ -307,34 +307,6 @@ export class GraphEngine {
     implicitGraphs.forEach(g => this.drawImplicit(g));
   }
 
-  /* ============ Gelişmiş grafik derleme ============ */
-static detectGraphType(exprStr) {
-    exprStr = exprStr.replace(/\s+/g, "");
-
-    // 1. Eşitsizlik varsa -> IMPLICIT
-    const inequalityPattern = /[<>]=?|≤|≥|and|or|\&\&|\|\||∧|∨/;
-    if (inequalityPattern.test(exprStr)) return "implicit";
-
-    // 2. Parametrik (Gelecek için)
-    if (exprStr.includes("t") && (exprStr.includes("x(t)") || exprStr.includes("y(t)"))) {
-      return "parametric";
-    }
-
-    // --- KRİTİK DÜZELTME BURADA ---
-    // Eğer ifade "y=" ile başlıyorsa -> EXPLICIT
-    if (exprStr.startsWith("y=")) return "explicit";
-
-    // Eğer içinde "=" varsa (ve y= ile başlamıyorsa) -> IMPLICIT (Örn: x=0, x=y)
-    if (exprStr.includes("=")) return "implicit";
-    // -----------------------------
-
-    // Standart kontroller
-    if (exprStr.includes("y") && exprStr.includes("x")) return "implicit";
-    if (exprStr.includes("x")) return "explicit"; // Sadece x varsa (örn: "sin(x)")
-
-    return "implicit";
-  }
-
   // Yardımcı: Canvas'ı resim olarak export et
   exportAsImage() {
     return this.canvas.toDataURL('image/png');

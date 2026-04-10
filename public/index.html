@@ -7,7 +7,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <!-- İsteğe bağlı font (çalışmazsa serif'e düşer) -->
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&family=Noto+Sans+Devanagari:wght@400;700&display=swap" rel="stylesheet">
 
   <style>
     /* ========= Tema / Palet ========= */
@@ -26,10 +26,26 @@
     html,body{height:100%}
     body{
       margin:0; color:var(--ink);
-      font-family: "Libre Baskerville", Georgia, serif;
+      font-family: "Libre Baskerville", "Noto Sans Devanagari", Georgia, serif;
       background:
         radial-gradient(1200px 700px at 50% 0%, #f8f1e6 0%, #efe3cd 60%, #e6d5b5 100%),
         repeating-linear-gradient(10deg, #0000 0 24px, #00000006 24px 25px);
+    }
+
+    /* Dil seçici */
+    .lang-switcher{
+      position:absolute; top:16px; right:20px;
+      display:flex; gap:4px; z-index:10;
+    }
+    .lang-btn{
+      padding:4px 10px; font-size:12px; font-weight:700;
+      border:1px solid var(--gold); border-radius:6px;
+      background:#fffdf9; color:var(--muted); cursor:pointer;
+      font-family: inherit;
+    }
+    .lang-btn:hover{ background:#fff7e9; }
+    .lang-btn.active{
+      background:linear-gradient(#e9d6a6,#d6b86a); color:#3a2a0d;
     }
 
     /* Ana çerçeve (Victorian çizgiler) */
@@ -110,6 +126,7 @@
 </head>
 <body>
   <main class="frame">
+    <div id="langHost"></div>
     <div style="text-align:center; margin-bottom:20px;">
   <img src="/logo.png" alt="descx.art logo" style="height:80px;">
 </div>
@@ -118,37 +135,42 @@
     <section class="grid">
       <!-- Sol: Giriş formu -->
       <div class="card">
-        <h3>Odaya Katıl</h3>
+        <h3 data-i18n="lobby_join_heading">Odaya Katıl</h3>
         <div>
-          <label for="name">Kullanıcı adınız</label>
-          <input id="name" class="input" placeholder="ör. user1" />
+          <label for="name" data-i18n="lobby_username_label">Kullanıcı adınız</label>
+          <input id="name" class="input" placeholder="ör. user1" data-i18n-ph="lobby_username_ph" />
         </div>
         <div style="margin-top:10px">
-          <label for="room">Oda adı (yeni veya var olan)</label>
-          <input id="room" class="input" placeholder="ör. TestRoom" />
+          <label for="room" data-i18n="lobby_room_label">Oda adı (yeni veya var olan)</label>
+          <input id="room" class="input" placeholder="ör. TestRoom" data-i18n-ph="lobby_room_ph" />
         </div>
-        <button id="joinBtn" class="btn" type="button">Odaya Katıl</button>
+        <button id="joinBtn" class="btn" type="button" data-i18n="lobby_join_btn">Odaya Katıl</button>
       </div>
 
       <!-- Sağ: Oda listesi -->
       <div class="card">
-        <h3>Mevcut Odalar</h3>
+        <h3 data-i18n="lobby_rooms_heading">Mevcut Odalar</h3>
         <div id="roomList"></div>
-        <div class="foot">Bir odaya tıklayarak katılabilirsiniz.</div>
+        <div class="foot" data-i18n="lobby_click_hint">Bir odaya tıklayarak katılabilirsiniz.</div>
       </div>
     </section>
   </main>
 
-  <script>
+  <script type="module">
+    import { t, LANG, applyI18n, createLangSwitcher } from './i18n.js';
+
+    applyI18n();
+    document.getElementById('langHost').appendChild(createLangSwitcher());
+
     /* ========== Socket bağlan ========== */
     const socket = io();
 
     /* ========== Yardımcılar ========== */
     function statusText(r){
-      if (r.inGame) return 'Oynanıyor';
-      if (r.isWaiting) return 'Bekliyor';
-      if (r.isFull) return 'Dolu';
-      return 'Hazır';
+      if (r.inGame) return t('status_playing');
+      if (r.isWaiting) return t('status_waiting');
+      if (r.isFull) return t('status_full');
+      return t('status_ready');
     }
     function statusDot(r){
       if (r.inGame) return '🟢';
@@ -163,14 +185,14 @@
     const roomInput = document.getElementById('room');
 
     function goToGame(room, name){
-      window.location.href =
-        `/game.html?room=${encodeURIComponent(room)}&name=${encodeURIComponent(name)}`;
+      const qs = new URLSearchParams({ room, name, lang: LANG });
+      window.location.href = `/game.html?${qs.toString()}`;
     }
 
     joinBtn.addEventListener('click', () => {
       const name = (nameInput.value || '').trim();
       const room = (roomInput.value || '').trim();
-      if (!name || !room) { alert('Lütfen kullanıcı adı ve oda adı girin.'); return; }
+      if (!name || !room) { alert(t('lobby_alert_missing')); return; }
       goToGame(room, name);
     });
 
@@ -189,18 +211,26 @@
         div.className = 'room';
 
         const left = document.createElement('div');
-        left.innerHTML = `<span class="name">${r.name}</span>
-                          <span class="status">(${r.userCount} oyuncu)</span>`;
+        left.innerHTML = `<span class="name"></span>
+                          <span class="status"></span>`;
+        left.querySelector('.name').textContent = r.name;
+        left.querySelector('.status').textContent = '(' + t('status_players_count', r.userCount) + ')';
 
         const right = document.createElement('div');
         right.className = 'status';
-        right.innerHTML = `${statusText(r)} <span class="dot">${statusDot(r)}</span>`;
+        const label = document.createElement('span');
+        label.textContent = statusText(r) + ' ';
+        const dot = document.createElement('span');
+        dot.className = 'dot';
+        dot.textContent = statusDot(r);
+        right.appendChild(label);
+        right.appendChild(dot);
 
         div.appendChild(left);
         div.appendChild(right);
 
         div.onclick = () => {
-          const name = (nameInput.value || '').trim() || prompt('Kullanıcı adınız');
+          const name = (nameInput.value || '').trim() || prompt(t('lobby_prompt_username'));
           if (!name) return;
           nameInput.value = name;
           roomInput.value = r.name;
