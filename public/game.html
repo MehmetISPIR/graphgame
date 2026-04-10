@@ -125,6 +125,30 @@
 
   /* Painter kelime kutusu */
   #wordToShow{ background:#fff7e0; border:1px dashed #d4b06d; color:#3a2c18; padding:8px 10px; border-radius:8px; display:inline-block; margin-top:8px; }
+
+  /* ===== Responsive ===== */
+  @media (max-width: 900px){
+    .frame{ margin:12px auto; padding:14px; }
+    .frame::before{ inset:6px; }
+    .game-container{ grid-template-columns:1fr; padding:12px; gap:12px; }
+    .lang-switcher{ top:10px; right:12px; }
+  }
+  @media (max-width: 600px){
+    .frame{ margin:8px; padding:10px; border-radius:8px; }
+    .frame::before{ inset:4px; border-width:2px; border-radius:6px; }
+    .game-container{ padding:10px; gap:10px; border-radius:10px; }
+    .section{ padding:10px; margin-bottom:10px; border-radius:10px; }
+    h3,h4{ margin:0 0 8px; font-size:15px; }
+    .canvas-area{ padding:6px; }
+    .field input[type="text"], .field input[type="number"]{ min-width:72px; }
+    input[type="text"], input[type="number"]{ padding:8px 10px; font-size:14px; }
+    button{ padding:7px 12px; font-size:14px; }
+    .row{ gap:6px; }
+    #viewerControls input{ width:100%; margin-bottom:8px; }
+    #viewerControls button{ width:100%; }
+    .lang-switcher{ top:6px; right:8px; gap:2px; }
+    .lang-btn{ padding:3px 7px; font-size:11px; }
+  }
   </style>
 </head>
 <body>
