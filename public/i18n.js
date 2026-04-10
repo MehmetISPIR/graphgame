@@ -48,6 +48,9 @@ export const I18N = {
     game_over_alert: "Oyun bitti! Tüm oyuncular çizdi.",
     game_correct_alert: "Doğru! Kelime: {0}",
     game_wrong_alert: "Yanlış tahmin!",
+    game_invalid_expr: "Geçersiz ifade",
+    error_room_full: "Oda dolu",
+    error_invalid_join: "Geçersiz giriş bilgisi",
 
     /* Puzzle */
     puzzle_level: "Seviye",
@@ -118,6 +121,9 @@ export const I18N = {
     game_over_alert: "Game over! All players have drawn.",
     game_correct_alert: "Correct! Word: {0}",
     game_wrong_alert: "Wrong guess!",
+    game_invalid_expr: "Invalid expression",
+    error_room_full: "Room is full",
+    error_invalid_join: "Invalid join information",
 
     puzzle_level: "Level",
     puzzle_similarity: "Similarity",
@@ -187,6 +193,9 @@ export const I18N = {
     game_over_alert: "खेल समाप्त! सभी खिलाड़ियों ने चित्र बनाया।",
     game_correct_alert: "सही! शब्द: {0}",
     game_wrong_alert: "गलत अनुमान!",
+    game_invalid_expr: "अमान्य अभिव्यक्ति",
+    error_room_full: "कमरा भरा हुआ है",
+    error_invalid_join: "अमान्य प्रवेश जानकारी",
 
     puzzle_level: "स्तर",
     puzzle_similarity: "समानता",

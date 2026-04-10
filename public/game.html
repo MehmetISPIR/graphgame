@@ -245,20 +245,6 @@
     applyI18n();
     document.getElementById('langHost').appendChild(createLangSwitcher());
 
-    const socket = io();
-    const canvas = document.getElementById('canvas');
-    const engine = new GraphEngine(canvas);
-    let graphs = [];
-    let currentRole = 'viewer';
-    let currentWord = '';
-    let players = [];
-    let scores = {};
-    let timerInterval;
-    
-    // Süre senkronizasyonu için değişkenler
-    let roundStartTime = null;
-    let roundDuration = 180; // saniye cinsinden varsayılan
-
     // URL parametreleri
     const params = new URLSearchParams(location.search);
     const room = params.get('room');
@@ -268,7 +254,21 @@
     if (!room || !name) {
       alert(t('game_alert_missing'));
       window.location.href = '/index.html?lang=' + LANG;
+      throw new Error('missing room/name');
     }
+
+    const socket = io();
+    const canvas = document.getElementById('canvas');
+    const engine = new GraphEngine(canvas);
+    let graphs = [];
+    let currentRole = 'viewer';
+    let players = [];
+    let scores = {};
+    let timerInterval;
+
+    // Süre senkronizasyonu için değişkenler
+    let roundStartTime = null;
+    let roundDuration = 180; // saniye cinsinden varsayılan
 
     // Odaya giriş
     socket.emit('create', { room });
@@ -278,11 +278,16 @@
     function renderScores(sc = scores) {
       const scoresList = document.getElementById('scoresList');
       scoresList.innerHTML = '';
-      Object.entries(sc).forEach(([id, score]) => {
-        const player = players.find(p => p.id === id);
-        if (!player) return;
+      Object.entries(sc).forEach(([playerName, score]) => {
         const row = document.createElement('div');
-        row.innerHTML = `<span class="name">${player.name}</span><span class="pts">${score}</span>`;
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'name';
+        nameSpan.textContent = playerName;
+        const ptsSpan = document.createElement('span');
+        ptsSpan.className = 'pts';
+        ptsSpan.textContent = score;
+        row.appendChild(nameSpan);
+        row.appendChild(ptsSpan);
         scoresList.appendChild(row);
       });
     }
@@ -314,9 +319,10 @@
         return;
       }
 
-      // Sunucu zamanına göre kalan süreyi hesapla
+      // Sunucu zamanına göre kalan süreyi hesapla (saat kayması için clamp)
+      const totalMs = roundDuration * 1000;
       const elapsed = Date.now() - roundStartTime;
-      const remainingMs = Math.max(0, (roundDuration * 1000) - elapsed);
+      const remainingMs = Math.min(totalMs, Math.max(0, totalMs - elapsed));
       const remainingSec = Math.floor(remainingMs / 1000);
       
       const min = Math.floor(remainingSec / 60).toString().padStart(2, '0');
@@ -339,7 +345,7 @@
     function drawPreview() {
       if (currentRole !== 'painter') return;
       const expr = document.getElementById('expr').value.trim();
-      if (!expr) return;
+      if (!expr) { engine.render(graphs); return; }
 
       const xmin = parseFloat(document.getElementById('xmin').value) || -10;
       const xmax = parseFloat(document.getElementById('xmax').value) || 10;
@@ -392,7 +398,13 @@
       const color = document.getElementById('graphColor').value || '#b00';
 
       const type = GraphEngine.detectGraphType(expr);
-      const compiled = math.compile(expr.replace(/^y=/, ''));
+      let compiled;
+      try {
+        compiled = math.compile(expr.replace(/^y=/, ''));
+      } catch {
+        alert(t('game_invalid_expr'));
+        return;
+      }
 
       const newGraph = { type, expr, xmin, xmax, dx, dy, theta, color, compiled };
       graphs.push(newGraph);
@@ -507,7 +519,6 @@
     });
 
     socket.on('wordForPainter', word => {
-      currentWord = word;
       const shown = wordToString(word);
       const strong = document.createElement('strong');
       strong.textContent = t('game_word_to_draw', shown);
@@ -522,10 +533,18 @@
       document.getElementById('gameStatus').textContent = t('game_status_over');
       alert(t('game_over_alert'));
 
-      // Oyun bittiğinde timer'ı temizle
+      // Canvas'ı ve timer'ı temizle
+      graphs = [];
+      engine.render(graphs);
       clearInterval(timerInterval);
       roundStartTime = null;
       updateCountdown();
+    });
+
+    socket.on('errorMsg', payload => {
+      const code = typeof payload === 'string' ? payload : payload?.code;
+      const key = 'error_' + code;
+      alert(t(key));
     });
 
     socket.on('guessResult', res => {
