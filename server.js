@@ -54,37 +54,50 @@ app.use(express.static(path.join(__dirname, "public")));
 // ---- ODA DURUMU ----
 const rooms = new Map(); // roomId => Room
 
+// Çok dilli kelime havuzu — her öğe { tr, en, hi } objesidir.
+// Çizen oyuncu kendi dilinde kelimeyi görür, tahminler her dildeki karşılığı kabul eder.
+const WORDS = [
+  { tr: "gözlük",    en: "glasses",    hi: "चश्मा" },
+  { tr: "saat",      en: "watch",      hi: "घड़ी" },
+  { tr: "balon",     en: "balloon",    hi: "गुब्बारा" },
+  { tr: "dağ",       en: "mountain",   hi: "पहाड़" },
+  { tr: "bardak",    en: "glass",      hi: "गिलास" },
+  { tr: "bayrak",    en: "flag",       hi: "झंडा" },
+  { tr: "köprü",     en: "bridge",     hi: "पुल" },
+  { tr: "anahtar",   en: "key",        hi: "चाबी" },
+  { tr: "şemsiye",   en: "umbrella",   hi: "छाता" },
+  { tr: "makas",     en: "scissors",   hi: "कैंची" },
+  { tr: "yelkenli",  en: "sailboat",   hi: "नाव" },
+  { tr: "kelebek",   en: "butterfly",  hi: "तितली" },
+  { tr: "gitar",     en: "guitar",     hi: "गिटार" },
+  { tr: "kum saati", en: "hourglass",  hi: "रेत घड़ी" },
+  { tr: "mıknatıs",  en: "magnet",     hi: "चुंबक" },
+  { tr: "çapa",      en: "anchor",     hi: "लंगर" },
+  { tr: "ok",        en: "arrow",      hi: "तीर" },
+  { tr: "uçurtma",   en: "kite",       hi: "पतंग" },
+  { tr: "kulaklık",  en: "headphones", hi: "हेडफ़ोन" },
+  { tr: "fener",     en: "lantern",    hi: "लालटेन" },
+  { tr: "ay",        en: "moon",       hi: "चाँद" },
+  { tr: "yay",       en: "bow",        hi: "धनुष" },
+  { tr: "gözyaşı",   en: "teardrop",   hi: "आँसू" },
+  { tr: "kitaplık",  en: "bookshelf",  hi: "किताबों की अलमारी" },
+  { tr: "balık",     en: "fish",       hi: "मछली" },
+  { tr: "tren",      en: "train",      hi: "ट्रेन" },
+  { tr: "lamba",     en: "lamp",       hi: "दीपक" },
+];
+
 function pickRandomWord() {
-  const words = [
-      "gözlük",
-      "saat",
-      "balon",
-      "dağ",
-      "bardak",
-      "bayrak",
-      "köprü",
-      "anahtar",
-      "şemsiye",
-      "makas",
-      "yelkenli",
-      "kelebek",
-      "gitar",
-      "kum saati",
-      "mıknatıs",
-      "çapa",
-      "ok",
-      "uçurtma",
-      "kulaklık",
-      "fener",
-      "ay",
-      "yay",
-      "gözyaşı",
-      "kitaplık",
-      "balık",
-      "tren",
-      "lamba"
-        ];
-  return words[Math.floor(Math.random() * words.length)];
+  return WORDS[Math.floor(Math.random() * WORDS.length)];
+}
+
+// Tahmin kontrolü: kelime objesindeki herhangi bir dildeki karşılık eşleşirse doğru sayar.
+function wordMatches(word, guess) {
+  if (!word || guess == null) return false;
+  const g = String(guess).toLowerCase().trim();
+  if (typeof word === "string") return word.toLowerCase().trim() === g;
+  return Object.values(word).some(
+    (w) => typeof w === "string" && w.toLowerCase().trim() === g
+  );
 }
 
 function broadcastRoomList() {
@@ -315,7 +328,7 @@ io.on("connection", (socket) => {
     const user = r.users.find((u) => u.id === socket.id);
     if (!user) return;
 
-    if (r.word.toLowerCase() === (guess || "").toLowerCase()) {
+    if (wordMatches(r.word, guess)) {
       r.scores[socket.id] += 10;
       io.to(room).emit("guessResult", {
         correct: true,
