@@ -51,6 +51,7 @@ export const I18N = {
     game_invalid_expr: "Geçersiz ifade",
     error_room_full: "Oda dolu",
     error_invalid_join: "Geçersiz giriş bilgisi",
+    error_name_taken: "Bu isim odada kullanılıyor",
 
     /* Puzzle */
     puzzle_level: "Seviye",
@@ -124,6 +125,7 @@ export const I18N = {
     game_invalid_expr: "Invalid expression",
     error_room_full: "Room is full",
     error_invalid_join: "Invalid join information",
+    error_name_taken: "That name is already in use in this room",
 
     puzzle_level: "Level",
     puzzle_similarity: "Similarity",
@@ -196,6 +198,7 @@ export const I18N = {
     game_invalid_expr: "अमान्य अभिव्यक्ति",
     error_room_full: "कमरा भरा हुआ है",
     error_invalid_join: "अमान्य प्रवेश जानकारी",
+    error_name_taken: "यह नाम इस कमरे में पहले से उपयोग में है",
 
     puzzle_level: "स्तर",
     puzzle_similarity: "समानता",

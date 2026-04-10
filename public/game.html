@@ -270,9 +270,11 @@
     let roundStartTime = null;
     let roundDuration = 180; // saniye cinsinden varsayılan
 
-    // Odaya giriş
-    socket.emit('create', { room });
-    socket.emit('join', { room, user: { name, role: 'viewer' } });
+    // Odaya giriş — hem ilk bağlantıda hem reconnect'te otomatik çalışsın
+    socket.on('connect', () => {
+      socket.emit('create', { room });
+      socket.emit('join', { room, user: { name, role: 'viewer' } });
+    });
 
     // --- Yardımcılar ---
     function renderScores(sc = scores) {
@@ -543,8 +545,10 @@
 
     socket.on('errorMsg', payload => {
       const code = typeof payload === 'string' ? payload : payload?.code;
-      const key = 'error_' + code;
-      alert(t(key));
+      alert(t('error_' + code));
+      if (code === 'name_taken' || code === 'invalid_join' || code === 'room_full') {
+        window.location.href = '/index.html?lang=' + LANG;
+      }
     });
 
     socket.on('guessResult', res => {
