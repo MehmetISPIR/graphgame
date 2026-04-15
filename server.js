@@ -1,4 +1,30 @@
-// Çok odalı ve çok oyunculu matematik tahmin oyunu sunucusu (optimal süre senkronizasyonu)
+// =============================================================================
+// graphgame sunucusu — çok odalı, çok oyunculu matematik tahmin oyunu
+// =============================================================================
+// AKIŞ ÖZETİ:
+//   1. Client index.html'de isim+oda girer, game.html'e yönlenir.
+//   2. game.html socket bağlantısında "join" emit eder → server ensureRoom + user ekle.
+//   3. Odada 2 kişi olunca startGameIfReady otomatik gameStart çağırır.
+//   4. State machine: LOBBY → ROUND → INTERMISSION → ROUND ... → GAME_OVER
+//      ROUND: ressam çizer, diğerleri "guess" atar. Bilen olursa veya süre
+//      dolarsa endRound. INTERMISSION: kısa ara. Tüm oyuncular çizince set biter.
+//      loopSets=true ise yeni set başlar, değilse GAME_OVER.
+//   5. Disconnect olunca hemen silinmez — GRACE_MS penceresi açılır; oyuncu
+//      geri dönerse seamless devam, dönmezse kesin çıkartılır.
+//
+// ÖLÜ/YARIM KOD NOTLARI (güvenlik/config UI'sı hiç yapılmadı):
+//   - ensureRoom'un isPrivate/maxUsers parametreleri — UI'dan gönderilmiyor,
+//     hep default (isPrivate=false, maxUsers=6).
+//   - "create" handler'ı — "join" zaten ensureRoom çağırıyor, bu duplike.
+//   - "game:start" handler'ı ve gameStart(options) — manuel başlatma/özel
+//     tur süresi için planlandı, UI yapılmadı, hiç emit edilmiyor.
+//   - cfg.roundSec/interSec/loopSets — oda başına özelleştirilebilir değerler,
+//     ama özelleştirme yolu kapalı; hep 180s / 2s / true.
+//   - "game:end" + "gameOver" çift emit — yeni event ismine migration yarım
+//     kaldı, client'lar "gameOver" dinliyor. Yeni event boşa gidiyor.
+//   - "round:end" reason ("timeout"/"guessed") — client reason'u kullanmıyor,
+//     sadece kelimeyi gösteriyor.
+// =============================================================================
 
 const express = require("express");
 const app = express();
@@ -43,7 +69,14 @@ app.use((req, res, next) => {
 app.use(express.static(path.join(__dirname, "public")));
 
 // ---- ODA DURUMU ----
+// Bellek içi oda tablosu. Sunucu yeniden başlarsa her şey uçar — persistence yok.
+// Her Room objesi: { graphs, users[], word, inGame, scores, currentPainter,
+//   paintersDone, timers, state, cfg, roundStartTime, disconnectTimers, ... }
 const rooms = new Map(); // roomId => Room
+
+// Bağlantı kopması sonrası kullanıcıyı odada ne kadar süre tutacağımız (ms).
+// Dil değiştirme, F5, kısa ağ hıçkırığı bu pencerede yeniden bağlandığında sorunsuz devam eder.
+const GRACE_MS = 10000;
 
 // Çok dilli kelime havuzu — her öğe { tr, en, hi } objesidir.
 // Çizen oyuncu kendi dilinde kelimeyi görür, tahminler her dildeki karşılığı kabul eder.
@@ -91,6 +124,8 @@ function wordMatches(word, guess) {
   );
 }
 
+// Lobi'deki herkese güncel oda listesini yollar. Her oda değişiminde (join/disconnect/
+// grace/remove) çağrılır. isPrivate filtresi var ama hiçbir oda private değil (ölü kod).
 function broadcastRoomList() {
   const list = Array.from(rooms.entries())
     .filter(([_, r]) => !r.isPrivate)
@@ -106,22 +141,25 @@ function broadcastRoomList() {
 }
 
 // ---- Durum makinesi yardımcıları ----
+// Oda yoksa yaratır, varsa olanı döndürür. isPrivate/maxUsers parametreleri şu an
+// kullanılmıyor (UI özelleştirme yolu yok), default değerlerle gider.
 function ensureRoom(roomId, { isPrivate = false, maxUsers = 6 } = {}) {
   if (!rooms.has(roomId)) {
     rooms.set(roomId, {
-      graphs: [],
-      users: [],
-      word: "",
-      inGame: false,
-      isPrivate,
-      maxUsers,
-      scores: {},
-      paintersDone: new Set(),
-      currentPainter: null,
-      timers: { round: null, inter: null },
-      state: "LOBBY", // LOBBY | ROUND | INTERMISSION | GAME_OVER
-      cfg: { roundSec: 180, interSec: 2, loopSets: true },
-      roundStartTime: null,  // Round başlangıç zamanı
+      graphs: [],                  // O turda çizilmiş grafik listesi (ressam ekler)
+      users: [],                   // [{ id, name, role, disconnected }]
+      word: "",                    // { tr, en, hi } — ressama verilen kelime objesi
+      inGame: false,               // true: ROUND/INTERMISSION akışı aktif
+      isPrivate,                   // ÖLÜ: hep false, UI yok
+      maxUsers,                    // ÖLÜ özelleştirme ama join'de limit olarak kullanılıyor
+      scores: {},                  // name -> points (oda ömrü boyunca birikir)
+      paintersDone: new Set(),     // O sette çizmiş oyuncu id'leri (set = tur döngüsü)
+      currentPainter: null,        // Aktif ressamın socket.id'si
+      timers: { round: null, inter: null }, // setTimeout handle'ları
+      state: "LOBBY",              // LOBBY | ROUND | INTERMISSION | GAME_OVER
+      cfg: { roundSec: 180, interSec: 2, loopSets: true }, // ÖLÜ özelleştirme
+      roundStartTime: null,        // Client'lar saate göre kendi geri sayımını hesaplar
+      disconnectTimers: new Map(), // userId -> Timeout (grace pencere timerları)
     });
   }
   return rooms.get(roomId);
@@ -132,6 +170,83 @@ function clearTimers(r) {
   clearTimeout(r.timers?.round);
   clearTimeout(r.timers?.inter);
   r.timers = r.timers || { round: null, inter: null };
+}
+
+// Grace timer iptali (kullanıcı yeniden bağlandığında veya kesin çıkartılırken).
+function cancelGraceRemoval(r, userId) {
+  if (!r || !r.disconnectTimers) return;
+  const t = r.disconnectTimers.get(userId);
+  if (t) {
+    clearTimeout(t);
+    r.disconnectTimers.delete(userId);
+  }
+}
+
+// Kullanıcıyı odadan kesin olarak çıkartır. Ressamsa turu kapatır, oda boşalırsa siler.
+// Hem disconnect sonrası grace süresi dolunca, hem de aktif olarak başka odaya geçişte çağrılır.
+function removeUserFromRoom(roomName, userId) {
+  const r = rooms.get(roomName);
+  if (!r) return;
+  const index = r.users.findIndex((u) => u.id === userId);
+  if (index === -1) return;
+
+  const wasPainter = r.currentPainter === userId;
+  r.users.splice(index, 1);
+  r.paintersDone.delete(userId);
+  cancelGraceRemoval(r, userId);
+
+  if (r.users.length === 0) {
+    clearTimers(r);
+    for (const t of r.disconnectTimers.values()) clearTimeout(t);
+    r.disconnectTimers.clear();
+    rooms.delete(roomName);
+    broadcastRoomList();
+    return;
+  }
+
+  io.to(roomName).emit("users", r.users);
+
+  // Aktif (grace'te olmayan) oyuncu sayısı kritik eşiğin altına düştü mü?
+  const activeCount = r.users.filter((u) => !u.disconnected).length;
+
+  if (activeCount < 2) {
+    if (r.inGame) {
+      clearTimers(r);
+      r.inGame = false;
+      r.state = "GAME_OVER";
+      r.currentPainter = null;
+      r.roundStartTime = null;
+      r.paintersDone.clear();
+      io.to(roomName).emit("gameOver", r.scores);
+      io.to(roomName).emit("game:end", { scores: r.scores });
+    }
+  } else if (wasPainter && r.inGame) {
+    endRound(roomName, "timeout");
+  }
+  broadcastRoomList();
+}
+
+// Kullanıcıyı "disconnected" işaretler ve grace süresi sonunda kesin çıkartacak timer kurar.
+// Grace içinde yeniden bağlanırsa cancelGraceRemoval + flag sıfırlama ile sorunsuz devam eder.
+function scheduleGraceRemoval(roomName, userId) {
+  const r = rooms.get(roomName);
+  if (!r) return;
+  const user = r.users.find((u) => u.id === userId);
+  if (!user) return;
+
+  user.disconnected = true;
+  cancelGraceRemoval(r, userId);
+  const timer = setTimeout(() => {
+    const r2 = rooms.get(roomName);
+    if (!r2) return;
+    const u = r2.users.find((x) => x.id === userId);
+    if (!u || !u.disconnected) return; // bu arada yeniden bağlanmış
+    removeUserFromRoom(roomName, userId);
+  }, GRACE_MS);
+  r.disconnectTimers.set(userId, timer);
+
+  io.to(roomName).emit("users", r.users);
+  broadcastRoomList();
 }
 
 function emitGameState(roomId) {
@@ -146,9 +261,13 @@ function emitGameState(roomId) {
 }
 
 // ---- Ana giriş ----
+// Oyunu LOBBY'den ROUND state'ine sokar. options parametresi manuel başlatma için
+// planlandı (roundSec/interSec/loopSets override'ı) ama hiç emit edilmediğinden ÖLÜ.
+// Otomatik çağrı: startGameIfReady → 2 oyuncu olunca buraya düşer.
 function gameStart(roomId, options = {}) {
   const r = rooms.get(roomId);
   if (!r) return;
+  // ÖLÜ KOD — hiçbir yerden options gönderilmiyor, bu blok hep atlanıyor:
   if (options && typeof options === "object") {
     if (Number.isFinite(options.roundSec) && options.roundSec >= 10 && options.roundSec <= 600) {
       r.cfg.roundSec = options.roundSec;
@@ -166,6 +285,12 @@ function gameStart(roomId, options = {}) {
 }
 
 // ---- Tur başlat / bitir ----
+// Bir tur = bir ressamın çizip diğerlerinin tahmin ettiği süre. Her tur başında:
+// - henüz çizmemiş birini rastgele seç, ona ressam rolü ver, kelime ata
+// - herkese newGame emit et (roller + süre bilgisi)
+// - ressama wordForPainter (kelime objesi)
+// - roundSec sonra endRound("timeout")
+// Bütün oyuncular çizdiğinde "set" biter: loopSets ise yeniden, değilse GAME_OVER.
 function startRound(roomId) {
   const r = rooms.get(roomId);
   if (!r || !r.inGame) return;
@@ -220,6 +345,9 @@ function startRound(roomId) {
   r.timers.round = setTimeout(() => endRound(roomId, "timeout"), r.cfg.roundSec * 1000);
 }
 
+// Turu kapatır ve INTERMISSION (kısa ara) state'ine geçer. reason: "guessed" |
+// "timeout". Client bunu kullanmıyor (sadece kelimeyi gösteriyor) — reason ÖLÜ FIELD.
+// Ara bitince startRound ile bir sonraki tura geçer, ya da < 2 oyuncu kaldıysa GAME_OVER.
 function endRound(roomId, reason) {
   const r = rooms.get(roomId);
   if (!r) return;
@@ -260,9 +388,21 @@ function startGameIfReady(roomId) {
 }
 
 // ---- Socket IO ----
+// Client event haritası (hangi event ne işe yarar):
+//   create     → ÖLÜ: game.html her connect'te emit ediyor ama join zaten ensureRoom
+//                çağırdığı için redundant. Silme adayı.
+//   join       → Odaya girer/geri döner. Grace reconnect + ghost kick burada.
+//   addGraph   → Ressam yeni grafik gönderir, herkese broadcast.
+//   clearCanvas → Ressam tuvali temizler.
+//   guess      → Oyuncu tahmin atar. Doğruysa +10 puan + endRound.
+//   getRooms   → Lobi oda listesi talebi.
+//   game:start → ÖLÜ: client hiç emit etmiyor, manuel başlatma UI'sı yok.
+//   disconnect → Grace penceresi başlatır.
 io.on("connection", (socket) => {
   console.log(`Yeni bağlantı: ${socket.id}`);
 
+  // ÖLÜ HANDLER — game.html her connect'te bunu emit ediyor ama join de aynı işi
+  // yapıyor. isPrivate/maxUsers parametreleri crafted mesajla suistimal edilebilir.
   socket.on("create", ({ room, isPrivate = false, maxUsers = 6 }) => {
     const r = ensureRoom(room, { isPrivate, maxUsers });
     socket.join(room);
@@ -280,47 +420,35 @@ io.on("connection", (socket) => {
       return;
     }
 
-    // Bu socket başka bir odadaysa önce oradan çık (multi-room önleme)
+    // Bu socket başka bir odadaysa önce oradan kesin çık (grace yok — kasıtlı oda değişimi).
     for (const [otherName, otherRoom] of rooms.entries()) {
       if (otherName === room) continue;
-      const idx = otherRoom.users.findIndex((u) => u.id === socket.id);
-      if (idx !== -1) {
-        otherRoom.users.splice(idx, 1);
-        otherRoom.paintersDone.delete(socket.id);
+      if (otherRoom.users.some((u) => u.id === socket.id)) {
         socket.leave(otherName);
-        io.to(otherName).emit("users", otherRoom.users);
-        if (otherRoom.users.length < 2 && otherRoom.inGame) {
-          clearTimers(otherRoom);
-          otherRoom.inGame = false;
-          otherRoom.state = "GAME_OVER";
-          otherRoom.currentPainter = null;
-          otherRoom.roundStartTime = null;
-          otherRoom.paintersDone.clear();
-          io.to(otherName).emit("gameOver", otherRoom.scores);
-        }
+        removeUserFromRoom(otherName, socket.id);
       }
     }
 
     const r = ensureRoom(room);
 
-   // Aynı isimde bir kullanıcı var mı?
+    // Aynı isimde bir kullanıcı var mı?
     const existing = r.users.find((u) => u.name === name);
     if (existing) {
-      if (existing.id !== socket.id) {
-        // F5 ÇÖZÜMÜ: HAYALET SOKETİ ZORLA KOV (KICK THE GHOST)
+      // İki senaryo: (a) grace süresinde yeniden bağlanma — temiz restore,
+      // (b) aynı isimle aktif başka bir oturum varken yeni bağlantı — ghost kick.
+      const oldId = existing.id;
+      if (existing.disconnected) {
+        cancelGraceRemoval(r, oldId);
+        existing.disconnected = false;
+      } else if (existing.id !== socket.id) {
+        // F5/çift sekme: eski aktif soketi zorla kov.
         const oldSocket = io.sockets.sockets.get(existing.id);
-        if (oldSocket) {
-          oldSocket.disconnect(true); 
-        }
+        if (oldSocket) oldSocket.disconnect(true);
+      }
 
-        // Oyuncunun yeni Socket ID'sini sisteme kaydet
-        const oldId = existing.id;
+      if (existing.id !== socket.id) {
         existing.id = socket.id;
-        
-        // Eğer oyuncu o an ressam idiyse, fırçayı yeni ID'ye ver
         if (r.currentPainter === oldId) r.currentPainter = socket.id;
-        
-        // Daha önce çizim yaptıysa, listeyi güncelle
         if (r.paintersDone.has(oldId)) {
           r.paintersDone.delete(oldId);
           r.paintersDone.add(socket.id);
@@ -331,7 +459,7 @@ io.on("connection", (socket) => {
         socket.emit("errorMsg", { code: "room_full" });
         return;
       }
-      r.users.push({ id: socket.id, name, role: "viewer" });
+      r.users.push({ id: socket.id, name, role: "viewer", disconnected: false });
       if (r.scores[name] == null) r.scores[name] = 0;
     }
 
@@ -412,7 +540,8 @@ io.on("connection", (socket) => {
     broadcastRoomList();
   });
 
-  // (Opsiyonel) Client manuel başlatmak isterse
+  // ÖLÜ HANDLER — manuel başlatma + tur süresi override'ı için planlandı,
+  // hiçbir client emit etmiyor. Otomatik başlatma (startGameIfReady) devrede.
   socket.on("game:start", ({ room, options } = {}) => {
     const r = rooms.get(room);
     if (!r) return;
@@ -422,42 +551,14 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
+    // Hemen silme; grace penceresi başlat. Kullanıcı GRACE_MS içinde yeniden
+    // bağlanırsa (dil değiştirme, F5, kısa ağ kopması) kaldığı yerden devam eder.
+    // Aksi halde timer dolunca removeUserFromRoom çalışır ve asıl etkiler tetiklenir.
     for (const [name, r] of rooms.entries()) {
-      const index = r.users.findIndex((u) => u.id === socket.id);
-      if (index === -1) continue;
-
-      const wasPainter = r.currentPainter === socket.id;
-      r.users.splice(index, 1);
-      r.paintersDone.delete(socket.id);
-
-      if (r.users.length === 0) {
-        clearTimers(r);
-        rooms.delete(name);
-        continue;
-      }
-
-      io.to(name).emit("users", r.users);
-
-      // Üç olası dal — tam olarak bir tanesi çalışır:
-      if (r.users.length < 2) {
-        // 1) Yetersiz oyuncu: oyunu doğrudan bitir, ara event yok
-        if (r.inGame) {
-          clearTimers(r);
-          r.inGame = false;
-          r.state = "GAME_OVER";
-          r.currentPainter = null;
-          r.roundStartTime = null;
-          r.paintersDone.clear();
-          io.to(name).emit("gameOver", r.scores);
-          io.to(name).emit("game:end", { scores: r.scores });
-        }
-      } else if (wasPainter && r.inGame) {
-        // 2) Ressam çıktı ama oyun devam edebilir: turu standart şekilde kapat
-        endRound(name, "timeout");
-      }
-      // 3) Normal oyuncu çıkışı, oyun aynen devam eder
+      const user = r.users.find((u) => u.id === socket.id);
+      if (!user) continue;
+      scheduleGraceRemoval(name, socket.id);
     }
-    broadcastRoomList();
   });
 });
 
