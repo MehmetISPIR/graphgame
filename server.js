@@ -303,20 +303,24 @@ io.on("connection", (socket) => {
 
     const r = ensureRoom(room);
 
-    // Aynı isimde bir kullanıcı var mı?
+   // Aynı isimde bir kullanıcı var mı?
     const existing = r.users.find((u) => u.name === name);
     if (existing) {
-      // Eski socket hâlâ bağlı ise gerçek çarpışma → reddet
-      const oldSocket = io.sockets.sockets.get(existing.id);
-      if (existing.id !== socket.id && oldSocket && oldSocket.connected) {
-        socket.emit("errorMsg", { code: "name_taken" });
-        return;
-      }
-      // Aksi halde reconnect: eski kaydın socket.id'sini güncelle
       if (existing.id !== socket.id) {
+        // F5 ÇÖZÜMÜ: HAYALET SOKETİ ZORLA KOV (KICK THE GHOST)
+        const oldSocket = io.sockets.sockets.get(existing.id);
+        if (oldSocket) {
+          oldSocket.disconnect(true); 
+        }
+
+        // Oyuncunun yeni Socket ID'sini sisteme kaydet
         const oldId = existing.id;
         existing.id = socket.id;
+        
+        // Eğer oyuncu o an ressam idiyse, fırçayı yeni ID'ye ver
         if (r.currentPainter === oldId) r.currentPainter = socket.id;
+        
+        // Daha önce çizim yaptıysa, listeyi güncelle
         if (r.paintersDone.has(oldId)) {
           r.paintersDone.delete(oldId);
           r.paintersDone.add(socket.id);
